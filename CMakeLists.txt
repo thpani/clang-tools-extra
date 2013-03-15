@@ -5,3 +5,4 @@ add_subdirectory(cpp11-migrate)
 
 # Add the common testsuite after all the tools.
 add_subdirectory(test)
+add_subdirectory(loop-classify)
