@@ -1,10 +1,3 @@
-static const StatementMatcher IntegerRefComparisonMatcher =
-    expr(ignoringParenImpCasts(declRefExpr(to(
-        varDecl(hasType(isInteger())).bind(ConditionVarName)))));
-
-static const StatementMatcher IntegerLitComparisonMatcher =
-    expr(ignoringParenImpCasts(hasType(isInteger()))).bind(ConditionBoundName);
-
 static const StatementMatcher IncrementVarMatcher =
     declRefExpr(to(varDecl(hasType(isInteger())).bind(IncrementVarName)));
 
@@ -21,7 +14,6 @@ StatementMatcher WhileStmtMatcher = whileStmt().bind(LoopName);
 
 StatementMatcher FortranForLoopMatcher = forStmt(
     hasLoopInit(declStmt().bind(InitDeclStmt)),
-    hasCondition(binaryOperator(hasLHS(IntegerRefComparisonMatcher),
-                                hasRHS(IntegerLitComparisonMatcher)).bind(ConditionOperatorName)),
+    hasCondition(binaryOperator().bind(ConditionOperatorName)),
     hasIncrement(unaryOperator(hasUnaryOperand(IncrementVarMatcher)).bind(IncrementOperatorName)))
     .bind(LoopName);

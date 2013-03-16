@@ -10,8 +10,6 @@ using namespace clang::ast_matchers;
 using namespace clang::tooling;
 
 const char LoopName[] = "forLoop";
-const char ConditionBoundName[] = "conditionBound";
-const char ConditionVarName[] = "conditionVar";
 const char IncrementVarName[] = "incrementVar";
 const char InitVarName[] = "initVar";
 const char EndCallName[] = "endCall";
@@ -184,7 +182,7 @@ class EmptyBodyClassifier : public LoopClassifier {
     }
 };
 
-/* TODO: (impure) function calls, aliasses */
+/* TODO: not sound wrt impure function calls, aliasses */
 class ForLoopClassifier : public LoopClassifier {
  public:
   ForLoopClassifier(Replacements *Replace) : LoopClassifier("FOR-ADA", Replace) {}
@@ -192,7 +190,6 @@ class ForLoopClassifier : public LoopClassifier {
   void run(const MatchFinder::MatchResult &Result) {
     const ForStmt *FS = Result.Nodes.getNodeAs<clang::ForStmt>(LoopName);
     const DeclStmt *InitDecl = Result.Nodes.getNodeAs<DeclStmt>(InitDeclStmt);
-    const VarDecl *CondVar = Result.Nodes.getNodeAs<VarDecl>(ConditionVarName);
     const VarDecl *LoopVar = Result.Nodes.getNodeAs<VarDecl>(IncrementVarName);
     const Stmt *Body = FS->getBody();
     const BinaryOperator *ConditionOp = Result.Nodes.getNodeAs<BinaryOperator>(ConditionOperatorName);
@@ -219,18 +216,34 @@ class ForLoopClassifier : public LoopClassifier {
      * ==========================
      * 
      * loop condition is one of the following combinations:
-     * (i * N; i+) where (*; +) are
+     * (i * N; i+) and (N * i; i+) where (*; +) are
      *   < ; ++
      *   <=; ++
      *   > ; --
      *   >=; --
      */
-    // TODO support N * i
+
     const BinaryOperatorKind ConditionOpCode = ConditionOp->getOpcode();
     if ((ConditionOpCode == BO_LT || ConditionOpCode == BO_LE) && !IncrementOp->isIncrementOp())
       return;
     if ((ConditionOpCode == BO_GT || ConditionOpCode == BO_GE) && !IncrementOp->isDecrementOp())
       return;
+
+    // LHS is an integer variable
+    const VarDecl *CondVar;
+    const Expr *ConditionLHS = ConditionOp->getLHS()->IgnoreParenImpCasts();
+    if (const DeclRefExpr *CondVarDRE = dyn_cast<DeclRefExpr>(ConditionLHS)) {
+      if (!CondVarDRE->getType()->isIntegerType()) {
+        return;
+      }
+      if (!(CondVar = dyn_cast<VarDecl>(CondVarDRE->getDecl()))) {
+        // TODO could be something more complex
+        return;
+      }
+    }
+    else {
+      return;
+    }
 
     // RHS is either an ...
     const Expr *ConditionRHS = ConditionOp->getRHS()->IgnoreParenImpCasts();
@@ -252,13 +265,12 @@ class ForLoopClassifier : public LoopClassifier {
         }
       }
       else {
-        assert(false); // this is note a variable reference
+        assert(false); // this is not a variable reference
         return;
       }
     }
     else {
-      // ... something more complex (member expression, array subscript, ...)
-      ; // TODO not sound
+      // TODO could be something more complex (member expression, array subscript, ...)
     }
 
     /* Ensure InitVar = CondVar = IncVar */
