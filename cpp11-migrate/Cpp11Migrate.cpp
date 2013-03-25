@@ -11,19 +11,7 @@
 /// \brief This file implements the C++11 feature migration tool main function
 /// and transformation framework.
 ///
-/// Usage:
-/// cpp11-migrate [-p <build-path>] <file1> <file2> ... [-- [compiler-options]]
-///
-/// Where <build-path> is a CMake build directory containing a file named
-/// compile_commands.json which provides compiler options for building each
-/// sourc file. If <build-path> is not provided the compile_commands.json file
-/// is searched for through all parent directories.
-///
-/// Alternatively, one can provide compile options to be applied to every source
-/// file after the optional '--'.
-///
-/// <file1>... specify the paths of files in the CMake source tree, with the
-/// same requirements as other tools built on LibTooling.
+/// See user documentation for usage instructions.
 ///
 //===----------------------------------------------------------------------===//
 
@@ -48,6 +36,15 @@ static cl::opt<RiskLevel> MaxRiskLevel(
                           "change semantics"),
                clEnumValEnd),
     cl::init(RL_Reasonable));
+
+static cl::opt<bool> FinalSyntaxCheck(
+    "final-syntax-check",
+    cl::desc("Check for correct syntax after applying transformations"),
+    cl::init(false));
+
+static cl::opt<bool>
+SummaryMode("summary", cl::desc("Print transform summary"),
+            cl::init(false));
 
 class EndSyntaxArgumentsAdjuster : public ArgumentsAdjuster {
   CommandLineArguments Adjust(const CommandLineArguments &Args) {
@@ -74,16 +71,6 @@ int main(int argc, const char **argv) {
     return 1;
   }
 
-  // Initial syntax check.
-  ClangTool SyntaxTool(OptionsParser.getCompilations(),
-                       OptionsParser.getSourcePathList());
-
-  // First, let's check to make sure there were no errors.
-  if (SyntaxTool.run(newFrontendActionFactory<clang::SyntaxOnlyAction>()) !=
-      0) {
-    return 1;
-  }
-
   FileContentsByPath FileStates1, FileStates2,
       *InputFileStates = &FileStates1, *OutputFileStates = &FileStates2;
 
@@ -98,31 +85,44 @@ int main(int argc, const char **argv) {
       // FIXME: Improve ClangTool to not abort if just one file fails.
       return 1;
     }
+    if (SummaryMode) {
+      llvm::outs() << "Transform: " << (*I)->getName()
+                   << " - Accepted: "
+                   << (*I)->getAcceptedChanges();
+      if ((*I)->getChangesNotMade()) {
+         llvm::outs() << " - Rejected: "
+                      << (*I)->getRejectedChanges()
+                      << " - Deferred: "
+                      << (*I)->getDeferredChanges();
+      }
+      llvm::outs() << "\n";
+    }
     std::swap(InputFileStates, OutputFileStates);
     OutputFileStates->clear();
   }
 
   // Final state of files is pointed at by InputFileStates.
 
-  // Final Syntax check.
-  ClangTool EndSyntaxTool(OptionsParser.getCompilations(),
-                          OptionsParser.getSourcePathList());
+  if (FinalSyntaxCheck) {
+    ClangTool EndSyntaxTool(OptionsParser.getCompilations(),
+                            OptionsParser.getSourcePathList());
 
-  // Add c++11 support to clang.
-  EndSyntaxTool.setArgumentsAdjuster(new EndSyntaxArgumentsAdjuster);
+    // Add c++11 support to clang.
+    EndSyntaxTool.setArgumentsAdjuster(new EndSyntaxArgumentsAdjuster);
 
-  for (FileContentsByPath::const_iterator I = InputFileStates->begin(),
-                                          E = InputFileStates->end();
-       I != E; ++I) {
-    EndSyntaxTool.mapVirtualFile(I->first, I->second);
+    for (FileContentsByPath::const_iterator I = InputFileStates->begin(),
+                                            E = InputFileStates->end();
+         I != E; ++I) {
+      EndSyntaxTool.mapVirtualFile(I->first, I->second);
+    }
+
+    if (EndSyntaxTool.run(newFrontendActionFactory<clang::SyntaxOnlyAction>())
+        != 0) {
+      return 1;
+    }
   }
 
-  if (EndSyntaxTool.run(newFrontendActionFactory<clang::SyntaxOnlyAction>()) !=
-      0) {
-    return 1;
-  }
-
-  // Syntax check passed, write results to file.
+  // Write results to file.
   for (FileContentsByPath::const_iterator I = InputFileStates->begin(),
                                           E = InputFileStates->end();
        I != E; ++I) {

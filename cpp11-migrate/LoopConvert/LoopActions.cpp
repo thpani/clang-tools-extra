@@ -395,7 +395,7 @@ static bool isDereferenceOfUop(const UnaryOperator *Uop,
 ///     T t = *i;
 ///     // use t, do not use i
 ///   }
-/// \code
+/// \endcode
 static bool isAliasDecl(const Decl *TheDecl, const VarDecl *IndexVar) {
   const VarDecl *VDecl = dyn_cast<VarDecl>(TheDecl);
   if (!VDecl)
@@ -734,7 +734,8 @@ void LoopFixer::doConversion(ASTContext *Context,
                              StringRef ContainerString,
                              const UsageResult &Usages,
                              const DeclStmt *AliasDecl, const ForStmt *TheLoop,
-                             bool ContainerNeedsDereference) {
+                             bool ContainerNeedsDereference,
+                             bool DerefByValue) {
   std::string VarName;
 
   if (Usages.size() == 1 && AliasDecl) {
@@ -749,7 +750,7 @@ void LoopFixer::doConversion(ASTContext *Context,
     // was used exactly once - in the initialization of AliasVar.
   } else {
     VariableNamer Namer(GeneratedDecls, &ParentFinder->getStmtToParentStmtMap(),
-                        TheLoop, IndexVar, MaybeContainer);
+                        TheLoop, IndexVar, MaybeContainer, Context);
     VarName = Namer.createIndexName();
     // First, replace all usages of the array subscript expression with our new
     // variable.
@@ -767,8 +768,15 @@ void LoopFixer::doConversion(ASTContext *Context,
   // Now, we need to construct the new range expresion.
   SourceRange ParenRange(TheLoop->getLParenLoc(), TheLoop->getRParenLoc());
 
-  QualType AutoRefType =
-      Context->getLValueReferenceType(Context->getAutoDeductType());
+  QualType AutoRefType = Context->getAutoDeductType();
+
+  // If an iterator's operator*() returns a 'T&' we can bind that to 'auto&'.
+  // If operator*() returns 'T' we can bind that to 'auto&&' which will deduce
+  // to 'T&&'.
+  if (DerefByValue)
+    AutoRefType = Context->getRValueReferenceType(AutoRefType);
+  else
+    AutoRefType = Context->getLValueReferenceType(AutoRefType);
 
   std::string MaybeDereference = ContainerNeedsDereference ? "*" : "";
   std::string TypeString = AutoRefType.getAsString();
@@ -871,9 +879,15 @@ StringRef LoopFixer::checkDeferralsAndRejections(ASTContext *Context,
     return "";
   }
 
-  StringRef ContainerString =
-      getStringFromRange(Context->getSourceManager(), Context->getLangOpts(),
-                         ContainerExpr->getSourceRange());
+  StringRef ContainerString;
+  if (isa<CXXThisExpr>(ContainerExpr->IgnoreParenImpCasts())) {
+    ContainerString = "this";
+  } else {
+    ContainerString = getStringFromRange(Context->getSourceManager(),
+                                         Context->getLangOpts(),
+                                         ContainerExpr->getSourceRange());
+  }
+
   // In case someone is using an evil macro, reject this change.
   if (ContainerString.empty())
     ++*RejectedChanges;
@@ -889,6 +903,7 @@ void LoopFixer::findAndVerifyUsages(ASTContext *Context,
                                     const Expr *ContainerExpr,
                                     const Expr *BoundExpr,
                                     bool ContainerNeedsDereference,
+                                    bool DerefByValue,
                                     const ForStmt *TheLoop,
                                     Confidence ConfidenceLevel) {
   ForLoopIndexUseVisitor Finder(Context, LoopVar, EndVar, ContainerExpr,
@@ -922,7 +937,8 @@ void LoopFixer::findAndVerifyUsages(ASTContext *Context,
 
   doConversion(Context, LoopVar, getReferencedVariable(ContainerExpr),
                ContainerString, Finder.getUsages(),
-               Finder.getAliasDecl(), TheLoop, ContainerNeedsDereference);
+               Finder.getAliasDecl(), TheLoop, ContainerNeedsDereference,
+               DerefByValue);
   ++*AcceptedChanges;
 }
 
@@ -980,6 +996,9 @@ void LoopFixer::run(const MatchFinder::MatchResult &Result) {
   if (!ContainerExpr && !BoundExpr)
     return;
 
+  bool DerefByValue = Nodes.getNodeAs<QualType>(DerefByValueResultName) != 0;
+
   findAndVerifyUsages(Context, LoopVar, EndVar, ContainerExpr, BoundExpr,
-                      ContainerNeedsDereference, TheLoop, ConfidenceLevel);
+                      ContainerNeedsDereference, DerefByValue, TheLoop,
+                      ConfidenceLevel);
 }

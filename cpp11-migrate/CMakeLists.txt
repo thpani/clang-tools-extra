@@ -15,8 +15,15 @@ list(APPEND Cpp11MigrateSources ${LoopConvertSources})
 file(GLOB_RECURSE UseNullptrSources "UseNullptr/*.cpp")
 list(APPEND Cpp11MigrateSources ${UseNullptrSources})
 
+file(GLOB_RECURSE UseAutoSources "UseAuto/*.cpp")
+list(APPEND Cpp11MigrateSources ${UseAutoSources})
+
 add_clang_executable(cpp11-migrate
   ${Cpp11MigrateSources}
+  )
+
+add_dependencies(cpp11-migrate
+  clang-headers
   )
 
 target_link_libraries(cpp11-migrate

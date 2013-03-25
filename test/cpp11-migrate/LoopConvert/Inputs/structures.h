@@ -137,4 +137,40 @@ struct Nested {
   iterator end();
 };
 
+// Like llvm::SmallPtrSet, the iterator has a dereference operator that returns
+// by value instead of by reference.
+template <typename T>
+struct PtrSet {
+  struct iterator {
+    bool operator!=(const iterator &other) const;
+    const T operator*();
+    iterator &operator++();
+  };
+  iterator begin() const;
+  iterator end() const;
+};
+
+template <typename T>
+struct TypedefDerefContainer {
+  struct iterator {
+    typedef T &deref_type;
+    bool operator!=(const iterator &other) const;
+    deref_type operator*();
+    iterator &operator++();
+  };
+  iterator begin() const;
+  iterator end() const;
+};
+
+template <typename T>
+struct RValueDerefContainer {
+  struct iterator {
+    typedef T &&deref_type;
+    bool operator!=(const iterator &other) const;
+    deref_type operator*();
+    iterator &operator++();
+  };
+  iterator begin() const;
+  iterator end() const;
+};
 #endif  // STRUCTURES_H

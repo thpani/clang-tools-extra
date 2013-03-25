@@ -8,10 +8,6 @@
 ##===----------------------------------------------------------------------===##
 
 CLANG_LEVEL := ../../..
-include $(CLANG_LEVEL)/../../Makefile.config
-
-# Recurse into any subdirectories that have their own Makefiles.
-DIRS := cpp11-migrate
 include $(CLANG_LEVEL)/Makefile
 
 # Test in all immediate subdirectories if unset.
@@ -26,9 +22,6 @@ TESTDIRS := $(TESTDIRS:$(PROJ_SRC_DIR)%=$(PROJ_OBJ_DIR)%)
 
 # Allow EXTRA_TESTDIRS to provide additional test directories.
 TESTDIRS += $(EXTRA_TESTDIRS)
-
-# List of roots for auto-generated tests.
-TESTDIRS += $(PROJ_OBJ_DIR)/cpp11-migrate/generated_tests
 
 ifndef TESTARGS
 ifdef VERBOSE
@@ -61,9 +54,6 @@ lit.site.cfg: FORCE
 	@$(ECHOPATH) s=@CLANG_TOOLS_SOURCE_DIR@=$(PROJ_SRC_DIR)/..=g >> lit.tmp
 	@$(ECHOPATH) s=@CLANG_TOOLS_BINARY_DIR@=$(PROJ_OBJ_DIR)/..=g >> lit.tmp
 	@$(ECHOPATH) s=@TARGET_TRIPLE@=$(TARGET_TRIPLE)=g >> lit.tmp
-	@$(ECHOPATH) s=@TEST_SOURCE_ROOT@=$(PROJ_SRC_DIR)=g >> lit.tmp
-	@$(ECHOPATH) s=@TEST_EXEC_ROOT@=$(PROJ_OBJ_DIR)=g >> lit.tmp
-	@$(ECHOPATH) s=@TESTSUITE_NAME@=Clang Tools=g >> lit.tmp
 	@sed -f lit.tmp $(PROJ_SRC_DIR)/lit.site.cfg.in > $@
 	@-rm -f lit.tmp
 
