@@ -1,3 +1,4 @@
+#include "iostream"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Basic/SourceManager.h"
@@ -34,6 +35,7 @@ static cl::extrahelp MoreHelp(
 );
 static cl::opt<bool> LoopStats("loop-stats");
 static cl::opt<bool> PerLoopStats("per-loop-stats");
+static cl::opt<bool> Annotate("annotate");
 
 static int output(RefactoringTool &Tool) {
   // Syntax check passed, write results to file.
@@ -99,22 +101,29 @@ int main(int argc, const char **argv) {
   Finder.addMatcher(AnyLoopMatcher, &emptyBodyClassifier);
 
   ForLoopClassifier AdaForLoopClassifier(&Tool.getReplacements());
-  Finder.addMatcher(FortranForLoopMatcher, &AdaForLoopClassifier);
+  Finder.addMatcher(ForStmtMatcher, &AdaForLoopClassifier);
+
+  WhileLoopClassifier WhileLoopClassifier(&Tool.getReplacements());
+  Finder.addMatcher(WhileStmtMatcher, &WhileLoopClassifier);
 
   if (Tool.run(newFrontendActionFactory(&Finder)) != 0) {
     return 1;
   }
 
   /* ----- Write annotated output ----- */
-  if (output(Tool) != 0) {
-    return 1;
+  if (Annotate) {
+    if (output(Tool) != 0) {
+      return 1;
+    }
   }
 
   /* ----- Print stats ----- */
   if (LoopStats) {
-    llvm::outs() << "==============" << "\n";
-    llvm::outs() << "= STATISTICS =\n";
-    llvm::outs() << "==============" << "\n";
+    std::cout.setf( std::ios::fixed, std:: ios::floatfield ); // floatfield set to fixed
+    std::cout.precision(1);
+    std::cout << "==============" << "\n";
+    std::cout << "= STATISTICS =\n";
+    std::cout << "==============" << "\n";
     std::map<std::string, int> Counter;
     std::map<llvm::FoldingSetNodeID, std::vector<std::string> >::iterator it;
     for (it = Classifications.begin(); it != Classifications.end(); ++it) {
@@ -128,21 +137,28 @@ int main(int argc, const char **argv) {
     for (std::map<std::string, int>::iterator it = Counter.begin();
          it != Counter.end();
          ++it) {
-      llvm::outs() << it->first << ": " << it->second << "\n";
+      std::cout << it->first << "\t" << it->second;
+      std::cout << "\t" << (100.*it->second/Counter["ANY"]) << "%";
+      size_t pos = it->first.find("-");
+      if (pos != std::string::npos) {
+        const std::string family = it->first.substr(0, pos);
+        std::cout << "\t" << (100.*it->second/Counter[family]) << "%";
+      }
+      std::cout << std::endl;
     }
   }
 
   if (PerLoopStats) {
-    llvm::outs() << "==============" << "\n";
-    llvm::outs() << "= STATISTICS =\n";
-    llvm::outs() << "==============" << "\n";
+    std::cout << "==============" << "\n";
+    std::cout << "= STATISTICS =\n";
+    std::cout << "==============" << "\n";
     std::map<llvm::FoldingSetNodeID, std::vector<std::string> >::iterator it;
     for (it = Classifications.begin(); it != Classifications.end(); ++it) {
-      llvm::outs() << it->first.ComputeHash() << ": ";
+      std::cout << it->first.ComputeHash() << ": ";
       for (std::vector<std::string>::iterator it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
-        llvm::outs() << *it2 << ", ";
+        std::cout << *it2 << ", ";
       }
-      llvm::outs() << "\n";
+      std::cout << "\n";
     }
   }
 

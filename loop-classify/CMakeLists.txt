@@ -1,5 +1,3 @@
-set(CMAKE_CXX_FLAGS "-g")
-
 add_clang_executable(loop-classify
     LoopClassify.cpp
   )

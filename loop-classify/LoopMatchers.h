@@ -1,19 +1,10 @@
-static const StatementMatcher IncrementVarMatcher =
-    declRefExpr(to(varDecl(hasType(isInteger())).bind(IncrementVarName)));
+const StatementMatcher DoStmtMatcher = doStmt().bind(LoopName);
+const StatementMatcher ForStmtMatcher = forStmt().bind(LoopName);
+const StatementMatcher ForRangeStmtMatcher = forRangeStmt().bind(LoopName);
+const StatementMatcher WhileStmtMatcher = whileStmt().bind(LoopName);
 
-StatementMatcher AnyLoopMatcher = anyOf(
-    doStmt().bind(LoopName),
-    forStmt().bind(LoopName),
-    forRangeStmt().bind(LoopName),
-    whileStmt().bind(LoopName));
-
-StatementMatcher DoStmtMatcher = doStmt().bind(LoopName);
-StatementMatcher ForStmtMatcher = forStmt().bind(LoopName);
-StatementMatcher ForRangeStmtMatcher = forRangeStmt().bind(LoopName);
-StatementMatcher WhileStmtMatcher = whileStmt().bind(LoopName);
-
-StatementMatcher FortranForLoopMatcher = forStmt(
-    hasLoopInit(declStmt().bind(InitDeclStmt)),
-    hasCondition(binaryOperator().bind(ConditionOperatorName)),
-    hasIncrement(unaryOperator(hasUnaryOperand(IncrementVarMatcher)).bind(IncrementOperatorName)))
-    .bind(LoopName);
+const StatementMatcher AnyLoopMatcher = anyOf(
+    DoStmtMatcher,
+    ForStmtMatcher,
+    ForRangeStmtMatcher,
+    WhileStmtMatcher);
