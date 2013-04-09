@@ -18,8 +18,8 @@
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/raw_os_ostream.h"
 
-#include "LoopClassifier.h"
 #include "LoopMatchers.h"
+#include "LoopClassifier.h"
 
 using namespace clang;
 using namespace clang::driver;
@@ -97,13 +97,13 @@ int main(int argc, const char **argv) {
   Finder.addMatcher(ForRangeStmtMatcher, &ForRangeStmtCounter);
   Finder.addMatcher(WhileStmtMatcher, &WhileStmtCounter);
 
-  EmptyBodyClassifier emptyBodyClassifier(&Tool.getReplacements());
+  EmptyBodyClassifier emptyBodyClassifier;
   Finder.addMatcher(AnyLoopMatcher, &emptyBodyClassifier);
 
-  ForLoopClassifier AdaForLoopClassifier(&Tool.getReplacements());
+  ForLoopClassifier AdaForLoopClassifier;
   Finder.addMatcher(ForStmtMatcher, &AdaForLoopClassifier);
 
-  WhileLoopClassifier WhileLoopClassifier(&Tool.getReplacements());
+  WhileLoopClassifier WhileLoopClassifier;
   Finder.addMatcher(WhileStmtMatcher, &WhileLoopClassifier);
 
   if (Tool.run(newFrontendActionFactory(&Finder)) != 0) {
