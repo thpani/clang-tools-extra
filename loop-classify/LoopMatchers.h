@@ -16,4 +16,4 @@ const StatementMatcher AnyLoopMatcher = anyOf(
     ForRangeStmtMatcher,
     WhileStmtMatcher);
 
-#endif
+#endif // LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_MATCHERS_H_
