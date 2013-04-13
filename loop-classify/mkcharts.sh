@@ -1,4 +1,56 @@
 BENCH=$1
+BENCH_DIR="$(pwd)/bench"
+TIMESTAMP=$(date "+%Y-%m-%d_%H:%M")
+
+if [[ ${BENCH} == "setup" ]] ; then
+    rm -rf ${BENCH_DIR}
+    mkdir -p ${BENCH_DIR}
+
+    cd ${BENCH_DIR}
+
+    wget http://ftp.gnu.org/gnu/coreutils/coreutils-8.21.tar.xz
+    tar xf coreutils-8.21.tar.xz
+    cd coreutils-8.21
+    ./configure
+    cd ..
+    echo -n "Please copy cBench15032013.tar.bz2 (from Moritz' email) to ${BENCH_DIR} [enter]"
+    read
+    tar xf cBench15032013.tar.bz2
+
+    # dependencies
+
+    wget http://www.tux.org/~ricdude/esound-0.2.8.tar.gz    # consumer_mad
+    tar xf esound-0.2.8.tar.gz
+    wget http://audiofile.68k.org/audiofile-0.3.6.tar.gz    # consumer_mad
+    tar xf audiofile-0.3.6.tar.gz
+    mkdir sys
+    wget http://people.freebsd.org/~ariff/lowlatency/soundcard.h # consumer_mad
+    mv soundcard.h sys
+
+    # office_ghostscript
+    cp /usr/include/stdio.h .
+    echo -n "\"extern int dprintf (int __fd, __const char *__restrict __fmt, ...) ...\" auskommentieren"
+    read
+    $EDITOR stdio.h
+
+    # office_ispell
+    echo -n "\"ssize_t getline(char ** __restrict, size_t * __restrict, FILE * __restrict) ...\" auskommentieren"
+    read
+    $EDITOR stdio.h
+
+    # network_patricia
+    wget ftp://ftp.irisa.fr/pub/OpenBSD/src/sys/sys/endian.h
+
+    # security_pgp_d
+    cp /usr/include/sys/time.h sys
+    echo -n "\"int gettimeofday(struct timeval * __restrict, void * __restrict) ...\" auskommentieren"
+    read
+    $EDITOR sys/time.h
+
+    cd ..
+
+    exit
+fi
 
 if [[ ${BENCH} == "both" ]] ; then
     "$0" coreutils $2
@@ -8,15 +60,22 @@ fi
 
 if [[ $2 == "run" ]] ; then
     if [[ ${BENCH} == "coreutils" ]] ; then
-        FILES=$(echo /Users/thomas/Downloads/coreutils-8.21/src/{base64.c,basename.c,cat.c,chcon.c,chgrp.c,chmod.c,chown-core.c,chown.c,chroot.c,cksum.c,comm.c,copy.c,cp-hash.c,cp.c,csplit.c,cut.c,date.c,dd.c,df.c,dircolors.c,dirname.c,du.c,echo.c,env.c,expand.c,expr.c,extent-scan.c,factor.c,false.c,find-mount-point.c,fmt.c,fold.c,getlimits.c,group-list.c,groups.c,head.c,hostid.c,hostname.c,id.c,install.c,join.c,kill.c,lbracket.c,libstdbuf.c,link.c,ln.c,logname.c,ls-dir.c,ls-ls.c,ls-vdir.c,ls.c,make-prime-list.c,mkdir.c,mkfifo.c,mknod.c,mktemp.c,mv.c,nice.c,nl.c,nohup.c,nproc.c,numfmt.c,od.c,operand2sig.c,paste.c,pathchk.c,pinky.c,pr.c,printenv.c,printf.c,prog-fprintf.c,ptx.c,pwd.c,readlink.c,realpath.c,relpath.c,remove.c,rm.c,rmdir.c,runcon.c,seq.c,setuidgid.c,shred.c,shuf.c,sleep.c,sort.c,split.c,stat.c,stdbuf.c,stty.c,sum.c,sync.c,tac.c,tail.c,tee.c,test.c,timeout.c,touch.c,tr.c,true.c,truncate.c,tsort.c,tty.c,uname-arch.c,uname-uname.c,uname.c,unexpand.c,uniq.c,unlink.c,uptime.c,users.c,version.c,wc.c,who.c,whoami.c,yes.c})
-        INCLUDES=-I/Users/thomas/Downloads/coreutils-8.21/lib/ 
+        FILES=$(find ${BENCH_DIR}/coreutils-8.21/src/ -not -name tac-pipe.c -and -name '*.c')
+        INCLUDES=-I${BENCH_DIR}/coreutils-8.21/lib/ 
+        DEFINES="-DHASH_ALGO_MD5"
     elif [[ ${BENCH} == "cBench" ]] ; then
-        # find ~/Downloads/cBench15032013/ -name '*.c' >all.txt
-        # ninja && bin/loop-classify $(find ~/Downloads/cBench15032013/ -name '*.c') -loop-stats -- -w -I/Users/thomas/Downloads/cBench15032013//automotive_bitcount/src -I/Users/thomas/Downloads/cBench15032013//automotive_qsort1/src -I/Users/thomas/Downloads/cBench15032013//automotive_susan_c/src -I/Users/thomas/Downloads/cBench15032013//bzip2d/src -I/Users/thomas/Downloads/cBench15032013//consumer_jpeg_c/src -I/Users/thomas/Downloads/cBench15032013//consumer_jpeg_c/src_d -I/Users/thomas/Downloads/cBench15032013//consumer_lame/src -I/Users/thomas/Downloads/cBench15032013//consumer_mad/src -I/Users/thomas/Downloads/cBench15032013//consumer_tiff2bw/src -I/Users/thomas/Downloads/cBench15032013//consumer_tiff2bw/src_tiff2rgba -I/Users/thomas/Downloads/cBench15032013//consumer_tiff2bw/src_tiffdither -I/Users/thomas/Downloads/cBench15032013//consumer_tiff2bw/src_tiffmedian -I/Users/thomas/Downloads/cBench15032013//network_dtra/src -I/Users/thomas/Downloads/cBench15032013//network_patricia/src -I/Users/thomas/Downloads/cBench15032013//office_ghostscript/src -I/Users/thomas/Downloads/cBench15032013//office_ispell/src -I/Users/thomas/Downloads/cBench15032013//office_rsynth/src -I/Users/thomas/Downloads/cBench15032013//office_stringsearch1/src -I/Users/thomas/Downloads/cBench15032013//security_blowfish_d/src -I/Users/thomas/Downloads/cBench15032013//security_pgp_d/src -I/Users/thomas/Downloads/cBench15032013//security_rijndael_d/src -I/Users/thomas/Downloads/cBench15032013//security_sha/src -I/Users/thomas/Downloads/cBench15032013//telecom_CRC32/src -I/Users/thomas/Downloads/cBench15032013//telecom_adpcm_c/src -I/Users/thomas/Downloads/cBench15032013//telecom_adpcm_c/src_d -I/Users/thomas/Downloads/cBench15032013//telecom_gsm/src -DEXIT_FAILURE=1 2>&1 >/dev/null | grep 'Error while processing' | cut -d' ' -f4 >excl.txt
-        # FILES=$(comm -23 all.txt excl.txt)
-        FILES=$(find ~/Downloads/cBench15032013/ -name '*.c')
-        INCLUDES=$(find ~/Downloads/cBench15032013/ -name '*.c' | xargs -L1 dirname | sort | uniq | sed 's/^/-I/' | tr '\n' ' ')
+        FILES=$(find ${BENCH_DIR}/cBench15032013/ -not -name memmove.c -and -name '*.c')
+        INCLUDES=$(find ${BENCH_DIR}/cBench15032013/ -name '*.c' | xargs -L1 dirname | sort | uniq | sed 's/^/-I/' | tr '\n' ' ')
+        # consumer_mad
+        INCLUDES="$INCLUDES -I${BENCH_DIR}/esound-0.2.8 -I${BENCH_DIR}/audiofile-0.3.6/libaudiofile/"
+        # consumer_mad & office_ghostscript
+        INCLUDES="$INCLUDES -I${BENCH_DIR}"
+        # automotive_{bitcount,qsort1}
         DEFINES="-DEXIT_FAILURE=1"
+        # consumer_mad
+        DEFINES="$DEFINES -DFPM_DEFAULT -DHAVE_CONFIG_H"
+        # security_pgp_d
+        DEFINES="$DEFINES -DUNIX"
     fi
     echo "BENCH\t$BENCH">$BENCH.stats
 
@@ -94,4 +153,8 @@ $(cat "${BENCH}.stats")
 
 \end{document}
 EOF
-pdflatex -interaction=nonstopmode "${BENCH}.tex" >/dev/null && open "${BENCH}.pdf" #convert -density 600x600 texput.pdf -quality 90 -resize 800x600 pic.png && open pic.png
+rm ${BENCH}.pdf
+pdflatex -interaction=nonstopmode "${BENCH}.tex" >/dev/null
+mv ${BENCH}.pdf ${BENCH}_${TIMESTAMP}.pdf
+ln -sf ${BENCH}_${TIMESTAMP}.pdf ${BENCH}.pdf
+open "${BENCH}.pdf" #convert -density 600x600 texput.pdf -quality 90 -resize 800x600 pic.png && open pic.png
