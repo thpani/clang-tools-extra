@@ -1,4 +1,6 @@
 #include "iostream"
+#include "fstream"
+#include "algorithm"
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Basic/SourceManager.h"
@@ -18,6 +20,7 @@
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/raw_os_ostream.h"
 
+#include "Loop.h"
 #include "LoopMatchers.h"
 #include "LoopClassifier.h"
 
@@ -33,45 +36,6 @@ static cl::extrahelp MoreHelp(
     "  find path/in/subtree -name '*.c' -o -name '*.cc' -o -name '*.cpp' | \\\n"
     "    xargs loop-classify\n"
 );
-static cl::opt<bool> LoopStats("loop-stats");
-static cl::opt<bool> PerLoopStats("per-loop-stats");
-static cl::opt<bool> Annotate("annotate");
-
-static int output(RefactoringTool &Tool) {
-  // Syntax check passed, write results to file.
-  LangOptions DefaultLangOptions;
-  IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
-  TextDiagnosticPrinter DiagnosticPrinter(llvm::errs(), &*DiagOpts);
-  DiagnosticsEngine Diagnostics(
-      IntrusiveRefCntPtr<DiagnosticIDs>(new DiagnosticIDs()),
-      &*DiagOpts, &DiagnosticPrinter, false);
-  SourceManager Sources(Diagnostics, Tool.getFiles());
-  Rewriter Rewrite(Sources, DefaultLangOptions);
-
-  if (!tooling::applyAllReplacements(Tool.getReplacements(), Rewrite)) {
-    llvm::errs() << "Skipped some replacements.\n";
-  }
-
-  for (Rewriter::buffer_iterator I = Rewrite.buffer_begin(),
-                                 E = Rewrite.buffer_end();
-       I != E; ++I) {
-    // FIXME: This code is copied from the FixItRewriter.cpp - I think it should
-    // go into directly into Rewriter (there we also have the Diagnostics to
-    // handle the error cases better).
-    const FileEntry *Entry =
-        Rewrite.getSourceMgr().getFileEntryForID(I->first);
-    std::string ErrorInfo;
-    std::string FileName = std::string(Entry->getName())+".out.c";
-    llvm::raw_fd_ostream FileStream(
-        FileName.c_str(), ErrorInfo, llvm::raw_fd_ostream::F_Binary);
-    if (!ErrorInfo.empty())
-      return 1;
-    I->second.write(FileStream);
-    FileStream.flush();
-  }
-
-  return 0;
-}
 
 int main(int argc, const char **argv) {
   llvm::sys::PrintStackTraceOnErrorSignal();
@@ -100,6 +64,9 @@ int main(int argc, const char **argv) {
   EmptyBodyClassifier emptyBodyClassifier;
   Finder.addMatcher(AnyLoopMatcher, &emptyBodyClassifier);
 
+  BranchingClassifier branchingClassifier;
+  Finder.addMatcher(AnyLoopMatcher, &branchingClassifier);
+
   ForLoopClassifier AdaForLoopClassifier;
   Finder.addMatcher(ForStmtMatcher, &AdaForLoopClassifier);
 
@@ -108,13 +75,6 @@ int main(int argc, const char **argv) {
 
   if (Tool.run(newFrontendActionFactory(&Finder)) != 0) {
     return 1;
-  }
-
-  /* ----- Write annotated output ----- */
-  if (Annotate) {
-    if (output(Tool) != 0) {
-      return 1;
-    }
   }
 
   /* ----- Print stats ----- */
@@ -149,17 +109,30 @@ int main(int argc, const char **argv) {
   }
 
   if (PerLoopStats) {
-    std::cout << "==============" << "\n";
-    std::cout << "= STATISTICS =\n";
-    std::cout << "==============" << "\n";
-    std::map<llvm::FoldingSetNodeID, std::vector<std::string> >::iterator it;
-    for (it = Classifications.begin(); it != Classifications.end(); ++it) {
-      std::cout << it->first.ComputeHash() << ": ";
-      for (std::vector<std::string>::iterator it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
-        std::cout << *it2 << ", ";
-      }
-      std::cout << "\n";
+    std::ofstream myfile;
+    myfile.open ("loops.sql");
+    myfile << LoopInfo::DumpSQLCreate();
+    myfile << "INSERT INTO loops VALUES\n";
+    std::map<unsigned, LoopInfo>::iterator it;
+    std::stringstream sstm;
+    for (it = Loops.begin(); it != Loops.end(); ++it) {
+      sstm << it->second.DumpSQL() << ",\n";
     }
+    std::string values = sstm.str();
+    values = values.substr(0, values.size()-2);
+    myfile << values << ";";
+    myfile.close();
+    /* std::cout << "==============" << "\n"; */
+    /* std::cout << "= STATISTICS =\n"; */
+    /* std::cout << "==============" << "\n"; */
+    /* std::map<llvm::FoldingSetNodeID, std::vector<std::string> >::iterator it; */
+    /* for (it = Classifications.begin(); it != Classifications.end(); ++it) { */
+    /*   std::cout << it->first.ComputeHash() << ": "; */
+    /*   for (std::vector<std::string>::iterator it2 = it->second.begin(); it2 != it->second.end(); ++it2) { */
+    /*     std::cout << *it2 << ", "; */
+    /*   } */
+    /*   std::cout << "\n"; */
+    /* } */
   }
 
   return 0;

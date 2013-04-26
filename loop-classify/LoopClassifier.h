@@ -1,5 +1,5 @@
-#ifndef LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_CLASSIFY_H_
-#define LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_CLASSIFY_H_
+#ifndef LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_CLASSIFIER_H_
+#define LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_CLASSIFIER_H_
 
 #include <sstream>
 #include <algorithm>
@@ -7,16 +7,20 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/AST/RecursiveASTVisitor.h"
+#include "Loop.h"
 
 using namespace clang;
 using namespace clang::tooling;
 
-std::map<llvm::FoldingSetNodeID, std::vector<std::string> > Classifications;
+llvm::cl::opt<bool> LoopStats("loop-stats");
+llvm::cl::opt<bool> PerLoopStats("per-loop-stats");
+llvm::cl::opt<bool> Annotate("annotate");
 
-enum CountingDirection { PLUS, MINUS };
+std::map<llvm::FoldingSetNodeID, std::vector<std::string> > Classifications;
+std::map<unsigned, LoopInfo> Loops;
+
 struct IncrementInfo {
-  CountingDirection Direction;
-  unsigned long long Step;
+  const VarDecl *VD;
   const Stmt *Statement;
 };
 
@@ -99,56 +103,42 @@ static bool areSameIntegerVariable(const Expr *First, const VarDecl *Second) {
   return areSameVariable(FirstVar, Second);
 }
 
-static std::pair<const VarDecl*, const IncrementInfo> getAdaIncrementInfo(Stmt *Stmt, const ASTContext &Context) {
+static const IncrementInfo getAdaIncrementInfo(Stmt *Stmt, const ASTContext &Context) {
   if (Expr *Expression = dyn_cast<Expr>(Stmt)) {
     Expression = Expression->IgnoreParenImpCasts();
     if (const UnaryOperator *UOP = dyn_cast<UnaryOperator>(Expression)) {
       // i{++,--}
       if (UOP->isIncrementDecrementOp()) {
-        if (const VarDecl *LoopVarCandidate = getIntegerVariable(UOP->getSubExpr())) {
-          const IncrementInfo I = {
-            UOP->isIncrementOp() ? PLUS : MINUS,
-            1,
-            UOP
-          };
-          return std::pair<const VarDecl*, const IncrementInfo>(LoopVarCandidate, I);
+        if (const VarDecl *VD = getIntegerVariable(UOP->getSubExpr())) {
+          return { VD, UOP };
         }
       }
     }
     else if (const BinaryOperator *BOP = dyn_cast<BinaryOperator>(Expression)) {
-      // i = i {+-} d
+      // i = i {+-} <int>
+      // i = <int> {+-} i
       if (BOP->getOpcode() == BO_Assign) {
-        if (const VarDecl *LoopVarCandidate = getIntegerVariable(BOP->getLHS())) {
+        if (const VarDecl *VD = getIntegerVariable(BOP->getLHS())) {
           if (const BinaryOperator *RHS = dyn_cast<BinaryOperator>(BOP->getRHS()->IgnoreParenImpCasts())) {
             if (RHS->isAdditiveOp()) {
               const Expr *RRHS = RHS->getRHS();
               const Expr *RLHS = RHS->getLHS();
               // TODO other side could also be a integer var / -> check if not assigned
               const IntegerLiteral *Int;
-              if ((areSameIntegerVariable(RRHS, LoopVarCandidate) && (Int = getIntegerLiteral(RLHS, Context)) != NULL) ||
-                  (areSameIntegerVariable(RLHS, LoopVarCandidate) && (Int = getIntegerLiteral(RRHS, Context)) != NULL)) {
-                const IncrementInfo I = {
-                  RHS->getOpcode() == BO_Add ? PLUS : MINUS,
-                  *Int->getValue().getRawData(),
-                  BOP
-                };
-                return std::pair<const VarDecl*, const IncrementInfo>(LoopVarCandidate, I);
+              if ((areSameIntegerVariable(RRHS, VD) && (Int = getIntegerLiteral(RLHS, Context)) != NULL) ||
+                  (areSameIntegerVariable(RLHS, VD) && (Int = getIntegerLiteral(RRHS, Context)) != NULL)) {
+                return { VD, BOP };
               }
             }
           }
         }
       }
-      // i {+-}= d
+      // i {+-}= <int>
       else if (BOP->getOpcode() == BO_AddAssign ||
                 BOP->getOpcode() == BO_SubAssign ) {
-        if (const VarDecl *LoopVarCandidate = getIntegerVariable(BOP->getLHS())) {
+        if (const VarDecl *VD = getIntegerVariable(BOP->getLHS())) {
           if (const IntegerLiteral *Int = getIntegerLiteral(BOP->getRHS(), Context)) {
-              const IncrementInfo I = {
-                BOP->getOpcode() == BO_AddAssign ? PLUS : MINUS,
-                *Int->getValue().getRawData(),
-                BOP
-              };
-              return std::pair<const VarDecl*, const IncrementInfo>(LoopVarCandidate, I);
+            return { VD, BOP };
           }
         }
       }
@@ -267,20 +257,20 @@ class AdaChecker {
       }
     }
     void checkBody(const Stmt *Body, const Expr *Cond, const IncrementInfo &Increment, const VarDecl *LoopVar) {
-      // check we're counting towards a bound
-      const BinaryOperatorKind ConditionOpCode = ConditionOp->getOpcode();
-      if (ConditionOpCode == BO_LT || ConditionOpCode == BO_LE) {
-        if ((LoopVarLHS && Increment.Direction == MINUS) ||
-            (!LoopVarLHS && Increment.Direction == PLUS)) {
-          throw checkerror("!ADA_NotTowardsBound");
-        }
-      }
-      else if (ConditionOpCode == BO_GT || ConditionOpCode == BO_GE) {
-        if ((LoopVarLHS && Increment.Direction == PLUS) ||
-            (!LoopVarLHS && Increment.Direction == MINUS)) {
-          throw checkerror("!ADA_NotTowardsBound");
-        }
-      }
+      /* // check we're counting towards a bound */
+      /* const BinaryOperatorKind ConditionOpCode = ConditionOp->getOpcode(); */
+      /* if (ConditionOpCode == BO_LT || ConditionOpCode == BO_LE) { */
+      /*   if ((LoopVarLHS && Increment.Direction == MINUS) || */
+      /*       (!LoopVarLHS && Increment.Direction == PLUS)) { */
+      /*     throw checkerror("!ADA_NotTowardsBound"); */
+      /*   } */
+      /* } */
+      /* else if (ConditionOpCode == BO_GT || ConditionOpCode == BO_GE) { */
+      /*   if ((LoopVarLHS && Increment.Direction == PLUS) || */
+      /*       (!LoopVarLHS && Increment.Direction == MINUS)) { */
+      /*     throw checkerror("!ADA_NotTowardsBound"); */
+      /*   } */
+      /* } */
 
       // check the condition bound var (if any) isn't assigned in the loop body
       // TODO fix this if incr becomes more flexible (step is symbolic)
@@ -407,6 +397,12 @@ class LoopCounter : public MatchFinder::MatchCallback {
       llvm::FoldingSetNodeID Id;
       Stmt->Profile(Id, *Result.Context, true);
       Classifications[Id].push_back(Marker);
+      if (PerLoopStats) {
+        const unsigned Hash = Id.ComputeHash();
+        if (Loops.find(Hash) == Loops.end()) {
+          Loops.insert(std::pair<unsigned, LoopInfo>(Hash, LoopInfo(Stmt, Result.Context, Result.SourceManager)));
+        }
+      }
     }
 
     virtual void run(const MatchFinder::MatchResult &Result) {
@@ -430,13 +426,7 @@ class LoopClassifier : public LoopCounter {
   }
 };
 
-class EmptyBodyClassifier : public LoopClassifier {
-  public:
-    EmptyBodyClassifier() : LoopClassifier("ANY-EMPTYBODY") {}
-
-    void run(const MatchFinder::MatchResult &Result) {
-      const Stmt *LSS = Result.Nodes.getNodeAs<Stmt>(LoopName);
-
+static const Stmt *getLoopBody(const Stmt *LSS) {
       const Stmt *Body;
       if (const DoStmt *LS = dyn_cast<DoStmt>(LSS)) {
         Body = LS->getBody();
@@ -446,8 +436,70 @@ class EmptyBodyClassifier : public LoopClassifier {
         Body = LS->getBody();
       } else if (const WhileStmt *LS = dyn_cast<WhileStmt>(LSS)) {
         Body = LS->getBody();
+      } else {
+        Body = NULL;
       }
-      assert(Body!=NULL);
+      return Body;
+}
+
+class BranchingClassifier : public LoopClassifier {
+  public:
+    BranchingClassifier() : LoopClassifier("BRANCH") {}
+
+    void run(const MatchFinder::MatchResult &Result) {
+      const Stmt *LS = Result.Nodes.getNodeAs<Stmt>(LoopName);
+
+      const Stmt *Body = getLoopBody(LS);
+
+      BranchVisitor Finder;
+      // depth, nodes
+      std::pair<int,int> BranchingInfo = Finder.findUsages(Body);
+
+      std::stringstream sstm;
+      sstm << "-Depth-" << BranchingInfo.first << "-Nodes-" << BranchingInfo.second;
+
+      LoopClassifier::run(Result, Marker+sstm.str());
+    }
+  private:
+  class BranchVisitor : public RecursiveASTVisitor<BranchVisitor> {
+    public:
+      std::pair<int,int> findUsages(const Stmt *Body) {
+        CurrentDepth = 0;
+        MaxDepth = 0;
+        NumNodes = 0;
+
+        TraverseStmt(const_cast<Stmt *>(Body));
+        return std::pair<int,int>(MaxDepth, NumNodes);
+      }
+
+      bool TraverseStmt(Stmt *StmtNode) {
+        if (StmtNode == NULL) return true;
+        bool ret;
+        if (dyn_cast<IfStmt>(StmtNode)) {
+          NumNodes++;
+          CurrentDepth++;
+          if (CurrentDepth > MaxDepth) MaxDepth = CurrentDepth;
+          ret = RecursiveASTVisitor<BranchVisitor>::TraverseStmt(StmtNode);
+          CurrentDepth--;
+        }
+        else {
+          ret = RecursiveASTVisitor<BranchVisitor>::TraverseStmt(StmtNode);
+        }
+        return ret;
+      }
+    private:
+      int CurrentDepth, MaxDepth, NumNodes;
+  };
+};
+
+class EmptyBodyClassifier : public LoopClassifier {
+  public:
+    EmptyBodyClassifier() : LoopClassifier("ANY-EMPTYBODY") {}
+
+    void run(const MatchFinder::MatchResult &Result) {
+      const Stmt *LS = Result.Nodes.getNodeAs<Stmt>(LoopName);
+
+      const Stmt *Body = getLoopBody(LS);
 
       if (isa<NullStmt>(Body) ||
           (isa<CompoundStmt>(Body) && cast<CompoundStmt>(Body)->size() == 0)) {
@@ -544,11 +596,9 @@ class WhileLoopClassifier : public ConditionClassifier {
       // check loop variable conadidates for ada condition
       AdaChecker Checker(*Result.Context);
       std::vector<std::string> reasons;
-      for (auto Pair : LoopVarCandidates) {
-        const VarDecl *LoopVarCandidate = Pair.first;
-        const IncrementInfo Increment = Pair.second;
+      for (auto I : LoopVarCandidates) {
         try {
-          Checker.check(WS->getCond(), Increment, WS->getBody(), LoopVarCandidate, NULL, LoopVarCandidate);
+          Checker.check(WS->getCond(), I, WS->getBody(), I.VD, NULL, I.VD);
           LoopClassifier::run(Result, "WHILE-ADA"+Checker.getSuffix());
           return;
         } catch(checkerror &e) {
@@ -578,22 +628,23 @@ class WhileLoopClassifier : public ConditionClassifier {
   class LoopVariableFinder : public RecursiveASTVisitor<LoopVariableFinder> {
     public:
       LoopVariableFinder(const ASTContext &Context) : Context(Context) {}
-      const std::vector<const std::pair<const VarDecl*, const IncrementInfo>> findLoopVarCandidates(const Stmt *Cond, const Stmt *Body) {
+      const std::vector<IncrementInfo> findLoopVarCandidates(const Stmt *Cond, const Stmt *Body) {
         TraverseStmt(const_cast<Stmt *>(Cond));
         TraverseStmt(const_cast<Stmt *>(Body));
         return LoopVarCandidates;
       }
 
+      // TODO: VisitExpr
       bool VisitStmt(Stmt *Stmt) {
         try {
-          auto Pair = getAdaIncrementInfo(Stmt, Context);
-          LoopVarCandidates.push_back(Pair);
+          const IncrementInfo I = getAdaIncrementInfo(Stmt, Context);
+          LoopVarCandidates.push_back(I);
         } catch(checkerror) {}
         return true;
       }
 
     private:
-      std::vector<const std::pair<const VarDecl*, const IncrementInfo>> LoopVarCandidates;
+      std::vector<IncrementInfo> LoopVarCandidates;
       const ASTContext &Context;
   };
 };
@@ -696,11 +747,7 @@ class ForLoopClassifier : public ConditionClassifier {
 
     AdaChecker Checker(*Result.Context);
     try {
-      const IncrementInfo Incr = {
-        IncrementOp->isIncrementOp() ? PLUS : MINUS,
-        1,
-        IncrementOp
-      };
+      const IncrementInfo Incr = { LoopVar, IncrementOp };
 
       Checker.check(FS->getCond(), Incr, FS->getBody(), LoopVar, InitVar, IncVar);
       LoopClassifier::run(Result, "FOR-ADA"+suffix+Checker.getSuffix());
@@ -714,4 +761,4 @@ class ForLoopClassifier : public ConditionClassifier {
 /* FS->dumpColor(); // AST */
 /* FS->dumpPretty(*Result.Context); // C source */
 
-#endif // LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_CLASSIFY_H_
+#endif // LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_CLASSIFIER_H_

@@ -79,9 +79,17 @@ if [[ $2 == "run" ]] ; then
     fi
     echo "BENCH\t$BENCH">$BENCH.stats
 
+    sed -i '' -e 's/\(.*FLAGS.*loop-classify.*\)-fno-exceptions\(.*\)/\1\2/' build.ninja
     ninja || exit 1
     echo bin/loop-classify $FILES -loop-stats -debug -- -w $INCLUDES $DEFINES
-    bin/loop-classify $FILES -loop-stats -debug -- -w $INCLUDES $DEFINES 2>&1 >$BENCH.stats | egrep -v '^Args:'
+    LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -loop-stats"
+    LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -per-loop-stats"
+    t0=`date +%s`
+    bin/loop-classify $FILES ${LOOP_CLASSIFY_ARGS} -debug -- -w $INCLUDES $DEFINES 2>&1 >$BENCH.stats | egrep -v '^Args:'
+    t1=`date +%s`
+    echo Elapsed $[$t1-$t0] >> $BENCH.stats
+    # mv loops.sql ${BENCH}.sql
+    # echo | sqlite3 -init ${BENCH}.sql ${BENCH}.db
 fi
 
 export LC_ALL=en_US
@@ -93,12 +101,15 @@ FOR_ADA_DETAIL=$(cat "${BENCH}.stats" | egrep '^FOR-!?ADA' | awk 'function strip
 WHILE_COND=$(cat "${BENCH}.stats" | egrep '^WHILE-Cond' | awk 'function stripl(s) { return substr(s, 0, length(s)-1) } { printf "%s/%s,", stripl($4), $1; SUM=SUM+(stripl($4)) } END { printf "%.1f/REST\n", 100-SUM; }' | sed 's/,$//' | sed 's/_/\\_/g')
 WHILE_ADA=$(cat "${BENCH}.stats" | egrep '^WHILE-ADA' | awk 'function stripl(s) { return substr(s, 0, length(s)-1) } { printf "%s/%s,", stripl($4), $1; SUM=SUM+(stripl($4)) } END { printf "%.1f/REST\n", 100-SUM; }' | sed 's/,$//' | sed 's/_/\\_/g')
 WHILE_ADA_DETAIL=$(cat "${BENCH}.stats" | egrep '^WHILE-!?ADA' | awk 'function stripl(s) { return substr(s, 0, length(s)-1) } { printf "%s/%s,", stripl($4), $1; }' | sed 's/,$//' | sed 's/_/\\_/g')
+BRANCH_DEPTH=$(cat "${BENCH}.stats" | grep ^BRANCH | awk '{split($1, a, "-"); depth=a[3]; node_count=a[5]; count=$2; depths[depth]+=count; nodes[node_count]+=count; } END {for (i in depths) {print "(", depths[i], ",", i, ")"}}')
+BRANCH_NODES=$(cat "${BENCH}.stats" | grep ^BRANCH | awk '{split($1, a, "-"); depth=a[3]; node_count=a[5]; count=$2; depths[depth]+=count; nodes[node_count]+=count; } END {for (i in nodes) {print "(", nodes[i], ",", i, ")"}}')
 
 cat <<EOF >"${BENCH}.tex"
 \documentclass{article}
 
 \usepackage[a4paper,landscape]{geometry}
 \usepackage{pgf-pie}
+\usepackage{pgfplots}
 \usetikzlibrary{shadows}
 
 \title{$BENCH}
@@ -119,6 +130,38 @@ $(cat "${BENCH}.stats")
 \section{Empty Body}
 \begin{tikzpicture}
 \pie[radius=6]{$EMPTYBODY}
+\end{tikzpicture}
+
+\section{Branching: Depth}
+\begin{tikzpicture}
+\begin{axis}[
+xbar,
+width=20cm,
+ytick=data,
+xmin=0,
+nodes near coords, nodes near coords align={horizontal}
+]
+\addplot+[xbar] coordinates
+{
+    ${BRANCH_DEPTH}
+};
+\end{axis}
+\end{tikzpicture}
+
+\section{Branching: Nodes}
+\begin{tikzpicture}
+\begin{axis}[
+xbar,
+width=20cm,
+ytick=data,
+xmin=0,
+nodes near coords, nodes near coords align={horizontal}
+]
+\addplot+[xbar] coordinates
+{
+    ${BRANCH_NODES}
+};
+\end{axis}
 \end{tikzpicture}
 
 \section{FOR Loops by Condition}
