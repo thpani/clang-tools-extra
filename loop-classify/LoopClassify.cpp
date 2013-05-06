@@ -50,11 +50,11 @@ int main(int argc, const char **argv) {
   MatchFinder Finder;
 
   /* ----- Match loops ----- */
-  LoopCounter AnyLoopCounter("ANY");
-  LoopCounter DoStmtCounter("DO");
-  LoopCounter ForStmtCounter("FOR");
-  LoopCounter ForRangeStmtCounter("FOR-RANGE");
-  LoopCounter WhileStmtCounter("WHILE");
+  LoopClassifier AnyLoopCounter("ANY");
+  LoopClassifier DoStmtCounter("DO");
+  LoopClassifier ForStmtCounter("FOR");
+  LoopClassifier ForRangeStmtCounter("FOR-RANGE");
+  LoopClassifier WhileStmtCounter("WHILE");
   Finder.addMatcher(AnyLoopMatcher, &AnyLoopCounter);
   Finder.addMatcher(DoStmtMatcher, &DoStmtCounter);
   Finder.addMatcher(ForStmtMatcher, &ForStmtCounter);
@@ -67,11 +67,17 @@ int main(int argc, const char **argv) {
   BranchingClassifier branchingClassifier;
   Finder.addMatcher(AnyLoopMatcher, &branchingClassifier);
 
-  ForLoopClassifier AdaForLoopClassifier;
-  Finder.addMatcher(ForStmtMatcher, &AdaForLoopClassifier);
+  ConditionClassifier ConditionClassifier;
+  Finder.addMatcher(AnyLoopMatcher, &ConditionClassifier);
 
-  WhileLoopClassifier WhileLoopClassifier;
-  Finder.addMatcher(WhileStmtMatcher, &WhileLoopClassifier);
+  AdaForLoopClassifier AdaForLoopClassifier;
+  Finder.addMatcher(AnyLoopMatcher, &AdaForLoopClassifier);
+
+  DataIterClassifier DataIterClassifier;
+  Finder.addMatcher(AnyLoopMatcher, &DataIterClassifier);
+
+  ArrayIterClassifier ArrayIterClassifier;
+  Finder.addMatcher(AnyLoopMatcher, &ArrayIterClassifier);
 
   if (Tool.run(newFrontendActionFactory(&Finder)) != 0) {
     return 1;
@@ -84,26 +90,42 @@ int main(int argc, const char **argv) {
     std::cout << "==============" << "\n";
     std::cout << "= STATISTICS =\n";
     std::cout << "==============" << "\n";
+    std::ofstream myfile;
+    myfile.open ("unclassified.txt", std::ofstream::app);
     std::map<std::string, int> Counter;
-    std::map<llvm::FoldingSetNodeID, std::vector<std::string> >::iterator it;
-    for (it = Classifications.begin(); it != Classifications.end(); ++it) {
-      if (it->second.size() < 2) { // ANY, TYPE
-        Counter["UNCLASSIFIED"]++;
+    for (auto Classification : Classifications) {
+      const Stmt *Stmt = Classification.first;
+      auto ClassList = Classification.second;
+
+      int negClasses = 0;
+      for (auto Class : ClassList) {
+        Counter[Class]++;
+        size_t pos = Class.find("@");
+        if (pos != std::string::npos) {
+          Counter[Class.substr(pos+1, std::string::npos)]++;
+        }
+        if(Class.find("!") != std::string::npos ||
+           Class.find("?") != std::string::npos ||
+           Class.find("-Cond-") != std::string::npos ||
+           Class.find("-Branch-") != std::string::npos) {
+          negClasses++;
+        }
       }
-      for (std::vector<std::string>::iterator it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
-        Counter[*it2]++;
+      if (ClassList.size() < (unsigned long) 3+negClasses) { // ANY, TYPE
+        Counter["UNCLASSIFIED"]++;
+        myfile << Loops.find(Stmt)->second.Dump() << "\n";
+        myfile << "----------------------------------------------------------------------------------------------------\n";
       }
     }
-    for (std::map<std::string, int>::iterator it = Counter.begin();
-         it != Counter.end();
-         ++it) {
-      std::cout << it->first << "\t" << it->second;
-      std::cout << "\t" << (100.*it->second/Counter["ANY"]) << "%";
-      size_t pos = it->first.find("-");
-      if (pos != std::string::npos) {
-        const std::string family = it->first.substr(0, pos);
-        std::cout << "\t" << (100.*it->second/Counter[family]) << "%";
-      }
+    myfile.close();
+    for (auto CounterItem : Counter) {
+      auto Class = CounterItem.first;
+      auto Count = CounterItem.second;
+      std::cout << Class << "\t" << Count;
+      std::cout << "\t" << (100.*Count/Counter["ANY"]) << "%";
+      size_t pos = Class.find("@");
+      const std::string family = pos != std::string::npos ? Class.substr(0, pos) : "ANY";
+      std::cout << "\t" << (100.*Count/Counter[family]) << "%";
       std::cout << std::endl;
     }
   }
@@ -113,10 +135,9 @@ int main(int argc, const char **argv) {
     myfile.open ("loops.sql");
     myfile << LoopInfo::DumpSQLCreate();
     myfile << "INSERT INTO loops VALUES\n";
-    std::map<unsigned, LoopInfo>::iterator it;
     std::stringstream sstm;
-    for (it = Loops.begin(); it != Loops.end(); ++it) {
-      sstm << it->second.DumpSQL() << ",\n";
+    for (auto Loop : Loops) {
+      sstm << Loop.second.DumpSQL() << ",\n";
     }
     std::string values = sstm.str();
     values = values.substr(0, values.size()-2);

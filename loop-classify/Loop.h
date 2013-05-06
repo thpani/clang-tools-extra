@@ -55,9 +55,11 @@ static std::string escape(std::string &str) {
   return result;
 }
 
+std::map<const Stmt*, std::vector<std::string> > Classifications;
+
 class LoopInfo {
   public:
-    LoopInfo(const Stmt *LoopStmt, const ASTContext *Context, const SourceManager *SM) {
+    LoopInfo(const Stmt *LoopStmt, const ASTContext *Context, const SourceManager *SM) : LoopStmt(LoopStmt) {
       llvm::FoldingSetNodeID ID;
       LoopStmt->Profile(ID, *Context, true);
       Hash = ID.ComputeHash();
@@ -72,6 +74,22 @@ class LoopInfo {
            << "CREATE TABLE loops (id INTEGER, filename TEXT, linenumber TEXT, sourcecode TEXT);\n";
       return sstm.str();
     }
+    const std::string DumpClasses() {
+      std::stringstream ss;
+      for(auto Class : Classifications.find(LoopStmt)->second)
+      {
+        ss << Class << ", ";
+      }
+      return ss.str();
+    }
+    const std::string Dump() {
+      std::stringstream sstm;
+      sstm << FileName << ":"
+           << LineNumber << "\n"
+           << DumpClasses() << "\n"
+           << SourceCode << "\n";
+      return sstm.str();
+    }
     const std::string DumpSQL() {
       std::stringstream sstm;
       sstm << "("
@@ -83,9 +101,12 @@ class LoopInfo {
       return sstm.str();
     }
   private:
+    const Stmt *LoopStmt;
     std::string FileName, SourceCode;
     int LineNumber;
     unsigned Hash;
 };
+
+std::map<const Stmt*, LoopInfo> Loops;
 
 #endif // LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_H_
