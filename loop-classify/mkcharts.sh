@@ -260,5 +260,5 @@ EOF
 rm ${BENCH}.pdf
 pdflatex -interaction=nonstopmode "${BENCH}.tex" >/dev/null
 mv ${BENCH}.pdf ${BENCH}_${TIMESTAMP}.pdf
-ln -sf ${BENCH}_${TIMESTAMP}.pdf ${BENCH}.pdf
+ln -f ${BENCH}_${TIMESTAMP}.pdf ${BENCH}.pdf
 open "${BENCH}.pdf" #convert -density 600x600 texput.pdf -quality 90 -resize 800x600 pic.png && open pic.png
