@@ -166,7 +166,7 @@ EOF
         nodes near coords={\pgfmathprintnumber{\pgfplotspointmeta}\%},
         nodes near coords align=center,
         ]
-        \addplot[red!80!black, fill=red!30] coordinates { $CLASSES_UPPER_COORDS $( [[ $PREFIX == "" ]] && echo "(ma,0)" ) };
+        \addplot[red!80!black, fill=red!30] coordinates { $CLASSES_UPPER_COORDS $( [[ $PREFIX == "DO@" ]] && echo "(ma,0)" ) $( [[ $PREFIX == "" ]] && echo "(ma,0) (un,0)" ) };
         \addplot[orange!80!black, fill=orange!30] coordinates { $CLASSES_UNK_COORDS };
         \addplot[green!80!black, fill=green!30] coordinates { $CLASSES_COORDS };
         \end{axis}

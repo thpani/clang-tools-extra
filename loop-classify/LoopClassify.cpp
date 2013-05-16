@@ -106,8 +106,8 @@ int main(int argc, const char **argv) {
         }
         if(Class.find("!") != std::string::npos ||
            Class.find("?") != std::string::npos ||
-           Class.find("-Cond-") != std::string::npos ||
-           Class.find("-Branch-") != std::string::npos) {
+           Class.find("Cond-") != std::string::npos ||
+           Class.find("Branch-") != std::string::npos) {
           negClasses++;
         }
       }
