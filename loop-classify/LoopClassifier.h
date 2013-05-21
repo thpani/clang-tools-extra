@@ -7,6 +7,9 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ParentMap.h"
 #include "clang/AST/RecursiveASTVisitor.h"
+#include "clang/Analysis/CFG.h"
+#include "clang/Analysis/Analyses/Dominators.h"
+#include "clang/Analysis/AnalysisContext.h"
 #include "PseudoConstantAnalysis.h"
 #include "Loop.h"
 
@@ -23,6 +26,11 @@ struct IncrementInfo {
   const Stmt *Statement;
   const VarDecl *Delta;
 };
+
+typedef struct {
+  const CFGBlock* Header;
+  const std::set<const CFGBlock*> Blocks;
+} NaturalLoop;
 
 class checkerror {
   public:
@@ -116,6 +124,7 @@ static const Expr *getLoopCond(const Stmt *LSS) {
   return Cond->IgnoreParenImpCasts();
 }
 
+// TODO use CFG
 static const std::vector<const Stmt*> getLoopBlocks(const Stmt *LSS) {
   std::vector<const Stmt*> result;
   if (const Stmt *Body = getLoopBody(LSS))
@@ -146,18 +155,76 @@ static const std::string getStmtMarker(const Stmt *LS) {
   }
 }
 class LoopClassifier : public MatchFinder::MatchCallback {
-  protected:
-  void classify(const MatchFinder::MatchResult &Result, const std::string Marker) {
-    const Stmt *Stmt = Result.Nodes.getNodeAs<clang::Stmt>(LoopName);
+  private:
+    void dfscb(std::set<const CFGBlock*> &visited, const CFGBlock *block) const {
+      if (!visited.insert(block).second)
+        return;
+      for (CFGBlock::const_pred_iterator it = block->pred_begin(); it != block->pred_end(); it++) {
+        dfscb(visited, *it);
+      }
+    }
+    AnalysisDeclContext *getADC(Stmt *LS, ASTContext *Context) const {
+      Stmt *Parent;
+      for (Stmt *S = LS;
+          S;
+          S = const_cast<Stmt*>(Context->getParents(*Parent).front().get<Stmt>())) {
+        Parent = S;
+      }
+      const FunctionDecl *D = Context->getParents(*Parent).front().get<FunctionDecl>();
+      AnalysisDeclContextManager mgr;
+      AnalysisDeclContext *AC = mgr.getContext(D);
+      return AC;
+    }
 
-    Classifications[Stmt].push_back(Marker);
-    // TODO
-    /* if (PerLoopStats) { */
-    /*   if (Loops.find(Stmt) == Loops.end()) { */
-        Loops.insert(std::pair<const class Stmt*, LoopInfo>(Stmt, LoopInfo(Stmt, Result.Context, Result.SourceManager)));
-      /* } */
-    /* } */
-  }
+    CFG *getCFG(Stmt *LS, ASTContext *Context) const {
+      CFG *C = getADC(LS, Context)->getCFG();
+      C->viewCFG(LangOptions());
+      return C;
+    }
+
+    DominatorTree getDom(Stmt *LS, ASTContext *Context) const {
+      AnalysisDeclContext *AC = getADC(LS, Context);
+      DominatorTree dom;
+      dom.buildDominatorTree(*AC);
+      return dom;
+    }
+
+  protected:
+    const NaturalLoop getLoop(const Stmt *LS, const ASTContext *Context) const {
+      CFG *CFG = getCFG(const_cast<Stmt*>(LS), const_cast<ASTContext*>(Context));
+      DominatorTree Dom = getDom(const_cast<Stmt*>(LS), const_cast<ASTContext*>(Context));
+      for (CFG::const_iterator it = CFG->begin(); it != CFG->end(); it++) {
+        const CFGBlock *block = *it;
+        for (CFGBlock::const_succ_iterator it2 = block->succ_begin(); it2 != block->succ_end(); it2++) {
+          const CFGBlock *Header = *it2;
+          if (Dom.dominates(Header, block) && Header->getTerminator() == LS) {
+            std::set<const CFGBlock*> visited = { Header };
+            dfscb(visited, block); // DFS on reverse CFG
+
+            /* std::cout << "natural loop for back edge (" */
+            /*           << block->getBlockID() << ", " << Header->getBlockID() */
+            /*           << "): {"; */
+            /* for (auto v : visited) { */
+            /*   std::cout << v->getBlockID() << ", "; */
+            /* } */
+            /* std::cout << "}" << std::endl; */
+
+            /* CFG->dump(LangOptions(), true); */
+            /* CFG->viewCFG(LangOptions()); */
+            return { Header, visited };
+          }
+        }
+      }
+      const std::set<const CFGBlock*> Empty;
+      return { NULL, Empty };
+    }
+
+    void classify(const MatchFinder::MatchResult &Result, const std::string Marker) {
+      const Stmt *LS = Result.Nodes.getNodeAs<clang::Stmt>(LoopName);
+
+      Classifications[LS].push_back(Marker);
+      Loops.insert(std::pair<const Stmt*, LoopInfo>(LS, LoopInfo(LS, Result.Context, Result.SourceManager)));
+    }
 
   public:
     LoopClassifier() : Marker("") {}
