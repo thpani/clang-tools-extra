@@ -4,22 +4,12 @@
 #include <sstream>
 #include <algorithm>
 #include <vector>
+#include <stack>
 #include "clang/AST/ASTContext.h"
-#include "clang/AST/ParentMap.h"
-#include "clang/AST/RecursiveASTVisitor.h"
-#include "clang/Analysis/CFG.h"
-#include "clang/Analysis/Analyses/Dominators.h"
-#include "clang/Analysis/AnalysisContext.h"
 #include "PseudoConstantAnalysis.h"
-#include "Loop.h"
 
 using namespace clang;
 using namespace clang::tooling;
-
-llvm::cl::opt<bool> LoopStats("loop-stats");
-llvm::cl::opt<bool> PerLoopStats("per-loop-stats");
-llvm::cl::opt<bool> CondClass("cond");
-llvm::cl::opt<bool> BranchClass("branch");
 
 struct IncrementInfo {
   const VarDecl *VD;
@@ -27,14 +17,25 @@ struct IncrementInfo {
   const VarDecl *Delta;
 };
 
-typedef struct {
-  const CFGBlock* Header;
-  const std::set<const CFGBlock*> Blocks;
-} NaturalLoop;
+enum ClassificationKind {
+  Fail,
+  Success,
+  Unknown
+};
+
+static std::string classificationKindToString(const ClassificationKind Kind) {
+  return std::string(Kind == Fail ? "!" : (Kind == Unknown ? "?" : ""));
+}
+
+static std::string reasonToString(const ClassificationKind Kind, const std::string Marker, const std::string Suffix) {
+  return classificationKindToString(Kind) + Marker + (Suffix.size() > 0 ? "-" : "") + Suffix;
+}
 
 class checkerror {
   public:
-    checkerror(const std::string &reason) : reason(reason) {}
+    checkerror(const ClassificationKind Kind, const std::string Marker, const std::string Suffix) :
+      reason(reasonToString(Kind, Marker, Suffix)) {}
+
     const std::string what() const throw() {
       return reason;
     }
@@ -42,9 +43,16 @@ class checkerror {
     const std::string reason;
 };
 
+typedef bool (*TypePredicate)(const VarDecl *);
+static bool isIntegerType(const VarDecl *VD) {
+  return VD->getType()->isIntegerType();
+}
+static bool isPointerType(const VarDecl *VD) {
+  return VD->getType()->isPointerType();
+}
 static bool isIntegerConstant(const Expr *Expression, const ASTContext *Context) {
   llvm::APSInt Result;
-  if (Expression->IgnoreParenImpCasts()->isIntegerConstantExpr(Result, const_cast<ASTContext&>(*Context))) {
+  if (Expression->EvaluateAsInt(Result, const_cast<ASTContext&>(*Context))) {
     return true;
   }
   return false;
@@ -52,7 +60,7 @@ static bool isIntegerConstant(const Expr *Expression, const ASTContext *Context)
 
 static llvm::APInt getIntegerConstant(const Expr *Expression, const ASTContext *Context) {
   llvm::APSInt Result;
-  if (Expression->IgnoreParenImpCasts()->isIntegerConstantExpr(Result, const_cast<ASTContext&>(*Context))) {
+  if (Expression->EvaluateAsInt(Result, const_cast<ASTContext&>(*Context))) {
     return Result;
   }
   llvm_unreachable("no integer constant");
@@ -60,7 +68,7 @@ static llvm::APInt getIntegerConstant(const Expr *Expression, const ASTContext *
 
 static const VarDecl *getVariable(const Expr *Expression) {
   if (Expression==NULL) return NULL;
-  const Expr *AdjustedExpr = Expression->IgnoreParenImpCasts();
+  const Expr *AdjustedExpr = Expression->IgnoreParenCasts();
   if (const DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(AdjustedExpr)) {
     if (const VarDecl *Var = dyn_cast<VarDecl>(DRE->getDecl())) {
       return Var;
@@ -69,20 +77,69 @@ static const VarDecl *getVariable(const Expr *Expression) {
   return NULL;
 }
 
-static const VarDecl *getIntegerVariable(const Expr *Expression) {
+static const VarDecl *getTypeVariable(const Expr *Expression, const TypePredicate TypePredicate) {
   const VarDecl *Var = getVariable(Expression);
-  if (Var != NULL && Var->getType()->isIntegerType()) {
+  if (Var != NULL && TypePredicate(Var)) {
     return Var;
   }
   return NULL;
 }
 
+static const VarDecl *getIntegerVariable(const Expr *Expression) {
+  return getTypeVariable(Expression, &isIntegerType);
+}
+
+static const std::pair<const VarDecl*, const VarDecl*> getArrayVariables(const Expr *Expression) {
+  if (const ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(Expression->IgnoreParenCasts())) {
+    const VarDecl *Base = getVariable(ASE->getBase());
+    if (const VarDecl *Idx = getIntegerVariable(ASE->getIdx())) {
+      return std::pair<const VarDecl*, const VarDecl*>(Base, Idx);
+    }
+  }
+  return std::pair<const VarDecl*, const VarDecl*>(NULL, NULL);
+}
+
+static bool isVariable(const Expr *Expression) {
+  return getVariable(Expression) != NULL;
+}
+static bool isIntegerVariable(const Expr *Expression) {
+  return getIntegerVariable(Expression) != NULL;
+}
+
 static const ValueDecl *getIntegerField(const Expr *Expression) {
   if (Expression==NULL) return NULL;
+  if (const ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(Expression->IgnoreParenCasts())) {
+    const Expr *Base = ASE->getBase()->IgnoreParenCasts();
+    if (const VarDecl *VD = getVariable(Base)) {
+      if (VD->getType()->isArrayType()) {
+          if (VD->getType()->castAsArrayTypeUnsafe()->getElementType()->isIntegerType()) {
+            return VD;
+          }
+      }
+      else {
+        // TODO
+        assert(VD->getType()->isPointerType());
+      }
+    }
+    if (const MemberExpr *ME = dyn_cast<MemberExpr>(Base->IgnoreParenCasts())) {
+      if (const FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl())) {
+        if (FD->getType()->isArrayType()) {
+          if (FD->getType()->castAsArrayTypeUnsafe()->getElementType()->isIntegerType()) {
+            return FD;
+          }
+        }
+        else {
+          // TODO
+          assert(FD->getType()->isPointerType());
+        }
+      }
+    }
+  }
   if (const VarDecl *VD = getIntegerVariable(Expression)) {
     return VD;
   }
-  if (const MemberExpr *ME = dyn_cast<MemberExpr>(Expression->IgnoreParenImpCasts())) {
+  if (const MemberExpr *ME = dyn_cast<MemberExpr>(Expression->IgnoreParenCasts())) {
+    // TODO
     if (const FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl())) {
       if (FD->getType()->isIntegerType()) {
         return FD;
@@ -92,161 +149,52 @@ static const ValueDecl *getIntegerField(const Expr *Expression) {
   return NULL;
 }
 
-static const Stmt *getLoopBody(const Stmt *LSS) {
-  const Stmt *Body;
-  if (const DoStmt *LS = dyn_cast<DoStmt>(LSS)) {
-    Body = LS->getBody();
-  } else if (const ForStmt *LS = dyn_cast<ForStmt>(LSS)) {
-    Body = LS->getBody();
-  } else if (const CXXForRangeStmt *LS = dyn_cast<CXXForRangeStmt>(LSS)) {
-    Body = LS->getBody();
-  } else if (const WhileStmt *LS = dyn_cast<WhileStmt>(LSS)) {
-    Body = LS->getBody();
-  } else {
-    Body = NULL;
-  }
-  return Body;
-}
-static const Expr *getLoopCond(const Stmt *LSS) {
-  const Expr *Cond;
-  if (const DoStmt *LS = dyn_cast<DoStmt>(LSS)) {
-    Cond = LS->getCond();
-  } else if (const ForStmt *LS = dyn_cast<ForStmt>(LSS)) {
-    Cond = LS->getCond();
-  } else if (const CXXForRangeStmt *LS = dyn_cast<CXXForRangeStmt>(LSS)) {
-    Cond = LS->getCond();
-  } else if (const WhileStmt *LS = dyn_cast<WhileStmt>(LSS)) {
-    Cond = LS->getCond();
-  } else {
-    Cond = NULL;
-  }
-  if (Cond==NULL) return Cond;
-  return Cond->IgnoreParenImpCasts();
-}
-
-// TODO use CFG
-static const std::vector<const Stmt*> getLoopBlocks(const Stmt *LSS) {
-  std::vector<const Stmt*> result;
-  if (const Stmt *Body = getLoopBody(LSS))
-    result.push_back(Body);
-  if (const Stmt *Cond = getLoopCond(LSS))
-    result.push_back(Cond);
-  if (const ForStmt *LS = dyn_cast<ForStmt>(LSS)) {
-    if (LS->getInc()) {
-      result.push_back(LS->getInc());
-    }
-  }
-  return result;
-}
-
-static const std::string getStmtMarker(const Stmt *LS) {
-  switch(LS->getStmtClass()) {
-    case Stmt::WhileStmtClass:
-      return "WHILE@";
-    case Stmt::DoStmtClass:
-      return "DO@";
-    case Stmt::ForStmtClass:
-      return "FOR@";
-    case Stmt::CXXForRangeStmtClass:
-      return "RANGE@";
-    default:
-      llvm_unreachable("Unknown loop statement class");
-      return "UNKNOWN@";
-  }
-}
-class LoopClassifier : public MatchFinder::MatchCallback {
-  private:
-    void dfscb(std::set<const CFGBlock*> &visited, const CFGBlock *block) const {
-      if (!visited.insert(block).second)
-        return;
-      for (CFGBlock::const_pred_iterator it = block->pred_begin(); it != block->pred_end(); it++) {
-        dfscb(visited, *it);
-      }
-    }
-    AnalysisDeclContext *getADC(Stmt *LS, ASTContext *Context) const {
-      Stmt *Parent;
-      for (Stmt *S = LS;
-          S;
-          S = const_cast<Stmt*>(Context->getParents(*Parent).front().get<Stmt>())) {
-        Parent = S;
-      }
-      const FunctionDecl *D = Context->getParents(*Parent).front().get<FunctionDecl>();
-      AnalysisDeclContextManager mgr;
-      AnalysisDeclContext *AC = mgr.getContext(D);
-      return AC;
-    }
-
-    CFG *getCFG(Stmt *LS, ASTContext *Context) const {
-      CFG *C = getADC(LS, Context)->getCFG();
-      C->viewCFG(LangOptions());
-      return C;
-    }
-
-    DominatorTree getDom(Stmt *LS, ASTContext *Context) const {
-      AnalysisDeclContext *AC = getADC(LS, Context);
-      DominatorTree dom;
-      dom.buildDominatorTree(*AC);
-      return dom;
-    }
-
-  protected:
-    const NaturalLoop getLoop(const Stmt *LS, const ASTContext *Context) const {
-      CFG *CFG = getCFG(const_cast<Stmt*>(LS), const_cast<ASTContext*>(Context));
-      DominatorTree Dom = getDom(const_cast<Stmt*>(LS), const_cast<ASTContext*>(Context));
-      for (CFG::const_iterator it = CFG->begin(); it != CFG->end(); it++) {
-        const CFGBlock *block = *it;
-        for (CFGBlock::const_succ_iterator it2 = block->succ_begin(); it2 != block->succ_end(); it2++) {
-          const CFGBlock *Header = *it2;
-          if (Dom.dominates(Header, block) && Header->getTerminator() == LS) {
-            std::set<const CFGBlock*> visited = { Header };
-            dfscb(visited, block); // DFS on reverse CFG
-
-            /* std::cout << "natural loop for back edge (" */
-            /*           << block->getBlockID() << ", " << Header->getBlockID() */
-            /*           << "): {"; */
-            /* for (auto v : visited) { */
-            /*   std::cout << v->getBlockID() << ", "; */
-            /* } */
-            /* std::cout << "}" << std::endl; */
-
-            /* CFG->dump(LangOptions(), true); */
-            /* CFG->viewCFG(LangOptions()); */
-            return { Header, visited };
-          }
-        }
-      }
-      const std::set<const CFGBlock*> Empty;
-      return { NULL, Empty };
-    }
-
-    void classify(const MatchFinder::MatchResult &Result, const std::string Marker) {
-      const Stmt *LS = Result.Nodes.getNodeAs<clang::Stmt>(LoopName);
-
-      Classifications[LS].push_back(Marker);
-      Loops.insert(std::pair<const Stmt*, LoopInfo>(LS, LoopInfo(LS, Result.Context, Result.SourceManager)));
-    }
-
+// Classifier := Stmt [!?@] {ADA,Array,...} - Suffix
+// Suffix := Str | Str _ Suffix
+class LoopClassifier {
   public:
-    LoopClassifier() : Marker("") {}
-    LoopClassifier(const std::string &Marker) : Marker(Marker) {}
-
-    virtual void run(const MatchFinder::MatchResult &Result) {
-      classify(Result, Marker);
+    void classify(const NaturalLoop* Loop) {
+      Classifications[Loop].push_back(Loop->getLoopStmtMarker());
     }
-
-  protected:
-    std::string Marker;
+    void classify(const NaturalLoop* Loop, const std::string Reason) {
+      std::string S = Loop->getLoopStmtMarker() + "@" + Reason;
+      Classifications[Loop].push_back(S);
+    }
+    void classify(const NaturalLoop* Loop, const ClassificationKind Kind, const std::string Marker, const std::string Suffix) {
+      std::string S = Loop->getLoopStmtMarker() + "@" + reasonToString(Kind, Marker, Suffix);
+      Classifications[Loop].push_back(S);
+    }
 };
 
-#include "Classifiers/Ada.h"
-#include "Classifiers/Branch.h"
-#include "Classifiers/EmptyBody.h"
-#include "Classifiers/Cond.h"
-#include "Classifiers/DataIter.h"
-#include "Classifiers/ArrayIter.h"
+class AnyLoopCounter {
+  public:
+    void classify(const NaturalLoop* Loop) {
+      Classifications[Loop].push_back("ANY");
+    }
+};
 
-/* FS->viewAST(); // dotty */
-/* FS->dumpColor(); // AST */
-/* FS->dumpPretty(*Result.Context); // C source */
+class SimpleLoopCounter : public LoopClassifier {
+  public:
+    void classify(const NaturalLoop* Loop) {
+      unsigned PredSize = Loop->getExit().pred_size();
+      if (PredSize == 1) {
+        LoopClassifier::classify(Loop, "SIMPLE");
+
+        unsigned negClasses=0;
+        for (auto Class : Classifications[Loop]) {
+          if(Class.find("!") != std::string::npos ||
+            Class.find("?") != std::string::npos ||
+            Class.find("Cond-") != std::string::npos ||
+            Class.find("Branch-") != std::string::npos ||
+            Class.find("SIMPLE") != std::string::npos) {
+            negClasses++;
+          }
+        }
+        if (Classifications[Loop].size() < (unsigned long) 3+negClasses) { // ANY, TYPE
+          /* Loop->write(); */
+        }
+      }
+    }
+};
 
 #endif // LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_CLASSIFIER_H_

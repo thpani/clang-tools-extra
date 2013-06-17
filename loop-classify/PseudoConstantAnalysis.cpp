@@ -42,7 +42,6 @@ PseudoConstantAnalysis::~PseudoConstantAnalysis() {
 // Returns true if the given ValueDecl is never written to in the given DeclBody
 bool PseudoConstantAnalysis::isPseudoConstant(const ValueDecl *VD, const Stmt *Allowed) {
   // Only local and static variables can be pseudoconstants
-  // TODO
   /* if (!VD->hasLocalStorage() && !VD->isStaticLocal()) */
   /*   return false; */
 

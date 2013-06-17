@@ -4,9 +4,22 @@ TIMESTAMP=$(date "+%Y-%m-%d_%H:%M")
 
 if [[ ${BENCH} == "setup" ]] ; then
     rm -rf ${BENCH_DIR}
-    mkdir -p ${BENCH_DIR}
+    mkdir -p ${BENCH_DIR}/include/
+    mkdir benchdot/
 
     cd ${BENCH_DIR}
+
+    wget 'http://www.mrtc.mdh.se/projects/wcet/wcet_bench.zip'
+    unzip -d wcet wcet_bench.zip
+    rm -rf wcet/__MACOSX/
+
+    svn co https://svn.sosy-lab.org/software/sv-benchmarks/tags/svcomp13/
+    cp /usr/include/sys/malloc.h ${BENCH_DIR}/include/
+
+    wget 'http://git.minix3.org/?p=minix.git;a=snapshot;h=972156d595e8a959a5204e158fa8f16b99e443d4;sf=tgz' -O minix-972156d595e8a959a5204e158fa8f16b99e443d4.tar.gz
+    tar xzf minix-972156d595e8a959a5204e158fa8f16b99e443d4.tar.gz
+    cd minix
+    cd ..
 
     wget http://ftp.gnu.org/gnu/coreutils/coreutils-8.21.tar.xz
     tar xf coreutils-8.21.tar.xz
@@ -52,19 +65,26 @@ if [[ ${BENCH} == "setup" ]] ; then
     exit
 fi
 
-if [[ ${BENCH} == "both" ]] ; then
+if [[ ${BENCH} == "all" ]] ; then
     "$0" coreutils $2 || exit $?
     "$0" cBench $2 || exit $?
+    "$0" wcet $2 || exit $?
     exit
 fi
 
 if [[ $2 == "run" ]] ; then
     if [[ ${BENCH} == "coreutils" ]] ; then
-        FILES=$(find ${BENCH_DIR}/coreutils-8.21/src/ -not -name tac-pipe.c -and -name '*.c')
+        FILES=$(find ${BENCH_DIR}/coreutils-8.21/src/ -not -name tac-pipe.c -and -not -name yes.c -and -name '*.c')
         INCLUDES=-I${BENCH_DIR}/coreutils-8.21/lib/ 
         DEFINES="-DHASH_ALGO_MD5"
+    elif [[ ${BENCH} == "svcomp" ]] ; then
+        FILES=$(find ${BENCH_DIR}/svcomp13/{bitvector,ddv-machzwd,heap-manipulation,ldv-regression,list-properties,locks,loops,memsafety,ntdrivers,ntdrivers-simplified,product-lines,pthread,pthread-atomic,ssh,ssh-simplified,systemc} -name '*.c')
+        # FILES=$(find ${BENCH_DIR}/svcomp13/{ldv-drivers,ldv-linux-3.4} -name '*.c')
+        INCLUDES="-I${BENCH_DIR}/include/"
+    elif [[ ${BENCH} == "wcet" ]] ; then
+        FILES=$(find ${BENCH_DIR}/wcet/ -not -name des.c -and -name '*.c')
     elif [[ ${BENCH} == "cBench" ]] ; then
-        FILES=$(find ${BENCH_DIR}/cBench15032013/ -not -name memmove.c -and -name '*.c')
+        FILES=$(find ${BENCH_DIR}/cBench15032013/ -not -name memmove.c -and -not -name interp.c -and -name '*.c')
         INCLUDES=$(find ${BENCH_DIR}/cBench15032013/ -name '*.c' | xargs -L1 dirname | sort | uniq | sed 's/^/-I/' | tr '\n' ' ')
         # consumer_mad
         INCLUDES="$INCLUDES -I${BENCH_DIR}/esound-0.2.8 -I${BENCH_DIR}/audiofile-0.3.6/libaudiofile/"
@@ -81,11 +101,10 @@ if [[ $2 == "run" ]] ; then
 
     sed -i '' -e 's/\(.*FLAGS.*loop-classify.*\)-fno-exceptions\(.*\)/\1\2/' build.ninja
     ninja || exit 1
-    echo bin/loop-classify $FILES -loop-stats -debug -- -w $INCLUDES $DEFINES
     LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -loop-stats"
-    LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -per-loop-stats"
+    # LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -per-loop-stats"
     t0=`date +%s`
-    bin/loop-classify $FILES ${LOOP_CLASSIFY_ARGS} -debug -- -w $INCLUDES $DEFINES 2>&1 >$BENCH.stats | egrep -v '^Args:'
+    bin/loop-classify $FILES ${LOOP_CLASSIFY_ARGS} -debug -bench-name "$BENCH" -- -w $INCLUDES $DEFINES 2>&1 >$BENCH.stats | egrep -v '^Args:'
     t1=`date +%s`
     echo Elapsed $[$t1-$t0] >> $BENCH.stats
     # mv loops.sql ${BENCH}.sql
@@ -130,13 +149,15 @@ gen_latex() {
     export PREFIX=""
     [[ $1 != "" ]] && export PREFIX="$1@"
     HEADER_PREFIX="ALL Statements"
-    CLASSES="(IntegerIter|DataIter|ArrayIter|MacroPseudoBlock|UNCLASSIFIED)"
-    STMT=$(supergrep '^(DO|FOR|WHILE)\t' '{ printf "%s/%s,", stripr($4), $1; }')
-    CLASSES_LABELS=$(supergrep "^${CLASSES}" '{ printf "%s,", $1; }')
-    CLASSES_X_COORDS=$(supergrep "^${CLASSES}" '{ printf "%s,", symbcoord($1); }')
-    CLASSES_COORDS=$(supergrep "^${CLASSES}" '{ printf "(%s,%s) ", symbcoord($1), stripr($4); }')
-    CLASSES_UNK_COORDS=$(supergrep "^${CLASSES}|\?${CLASSES}" '{ unk[symbcoord($1)] += stripr($4); }' 'for (i in unk) { printf "(%s,%s) ", i, unk[i]; i++ }')
-    CLASSES_UPPER_COORDS=$(supergrep "^[\?!]${CLASSES}-NoLoopVarCandidate" '{ printf "(%s,%s) ", symbcoord($1), 100-stripr($4); }')
+    CLASSES="(IntegerIter|DataIter|AArrayIter|PArrayIter|MacroPseudoBlock|UNCLASSIFIED)"
+    STMT=$(supergrep '^(DO|FOR|WHILE|GOTO)\t' '{ printf "%s/%s,", stripr($4), $1; }')
+    CLASSES_LABELS="IntegerIter,DataIter,AArrayIter,PArrayIter,MacroPseudoBlock,UNCLASSIFIED"
+    CLASSES_X_COORDS="in,da,aa,pa,ma,un"
+    CLASSES_PROG1='BEGIN { n=split("in da ar ma un", unkinv, " "); for (i in unkinv) unk[unkinv[i]] = 0; } { unk[symbcoord($1)] += stripr($4); }'
+    CLASSES_PROG2='for (i = 1; i <= n; i++) { printf "(%s,%s) ", unkinv[i], unk[unkinv[i]]; }'
+    CLASSES_COORDS=$(supergrep "^${CLASSES}" "$CLASSES_PROG1" "$CLASSES_PROG2")
+    CLASSES_UNK_COORDS=$(supergrep "^${CLASSES}|\?${CLASSES}"  "$CLASSES_PROG1" "$CLASSES_PROG2")
+    CLASSES_UPPER_COORDS=$(supergrep "^[\?!]${CLASSES}-NoLoopVarCandidate" "$CLASSES_PROG1" 'for (i = 1; i <= n; i++) { printf "(%s,%s) ", unkinv[i], 100-unk[unkinv[i]]; }')
     EMPTYBODY=$(supergrep "^EMPTYBODY" '{ printf "%s/%s,", stripr($4), $1; SUM=SUM+(stripr($4)) }' 'printf "%.1f/REST", 100-SUM;')
     COND=$(supergrep "^Cond" '{ printf "%s/%s,", stripr($4), $1; }')
     BRANCH_DEPTH=$(supergrep "^Branch" '{ split($1, a, "-"); depth=a[3]; node_count=a[5]; count=$2; depths[depth]+=count; nodes[node_count]+=count; }' 'for (i in depths) { print "(", depths[i], ",", i, ")" }')
@@ -166,7 +187,7 @@ EOF
         nodes near coords={\pgfmathprintnumber{\pgfplotspointmeta}\%},
         nodes near coords align=center,
         ]
-        \addplot[red!80!black, fill=red!30] coordinates { $CLASSES_UPPER_COORDS $( [[ $PREFIX == "DO@" ]] && echo "(ma,0)" ) $( [[ $PREFIX == "" ]] && echo "(ma,0) (un,0)" ) };
+        \addplot[red!80!black, fill=red!30] coordinates { $CLASSES_UPPER_COORDS };
         \addplot[orange!80!black, fill=orange!30] coordinates { $CLASSES_UNK_COORDS };
         \addplot[green!80!black, fill=green!30] coordinates { $CLASSES_COORDS };
         \end{axis}
@@ -249,6 +270,7 @@ $(gen_latex '' 'ALL (\texttt{for, while, do-while}) Statements')
 $(gen_latex 'FOR' '\texttt{for} Statements')
 $(gen_latex 'WHILE' '\texttt{while} Statements')
 $(gen_latex 'DO' '\texttt{do} Statements')
+$(gen_latex 'GOTO' '\texttt{goto} Statements')
 
 \section{Plain}
 \begin{verbatim}

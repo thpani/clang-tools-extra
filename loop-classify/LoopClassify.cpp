@@ -20,22 +20,16 @@
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/raw_os_ostream.h"
 
-#include "Loop.h"
-#include "LoopMatchers.h"
-#include "LoopClassifier.h"
+#include "CFGBuilder.h"
 
 using namespace clang;
 using namespace clang::driver;
 using namespace clang::tooling;
 using namespace llvm;
 
-static cl::extrahelp MoreHelp(
-    "\n"
-    "To run loop-classify on all files in a subtree of the source tree, use:\n"
-    "\n"
-    "  find path/in/subtree -name '*.c' -o -name '*.cc' -o -name '*.cpp' | \\\n"
-    "    xargs loop-classify\n"
-);
+using namespace sloopy;
+
+llvm::cl::opt<std::string> BenchName("bench-name");
 
 int main(int argc, const char **argv) {
   llvm::sys::PrintStackTraceOnErrorSignal();
@@ -49,35 +43,8 @@ int main(int argc, const char **argv) {
                        OptionsParser.getSourcePathList());
   MatchFinder Finder;
 
-  /* ----- Match loops ----- */
-  LoopClassifier AnyLoopCounter("ANY");
-  LoopClassifier DoStmtCounter("DO");
-  LoopClassifier ForStmtCounter("FOR");
-  LoopClassifier ForRangeStmtCounter("FOR-RANGE");
-  LoopClassifier WhileStmtCounter("WHILE");
-  Finder.addMatcher(AnyLoopMatcher, &AnyLoopCounter);
-  Finder.addMatcher(DoStmtMatcher, &DoStmtCounter);
-  Finder.addMatcher(ForStmtMatcher, &ForStmtCounter);
-  Finder.addMatcher(ForRangeStmtMatcher, &ForRangeStmtCounter);
-  Finder.addMatcher(WhileStmtMatcher, &WhileStmtCounter);
-
-  EmptyBodyClassifier emptyBodyClassifier;
-  Finder.addMatcher(AnyLoopMatcher, &emptyBodyClassifier);
-
-  BranchingClassifier branchingClassifier;
-  Finder.addMatcher(AnyLoopMatcher, &branchingClassifier);
-
-  ConditionClassifier ConditionClassifier;
-  Finder.addMatcher(AnyLoopMatcher, &ConditionClassifier);
-
-  AdaForLoopClassifier AdaForLoopClassifier;
-  Finder.addMatcher(AnyLoopMatcher, &AdaForLoopClassifier);
-
-  DataIterClassifier DataIterClassifier;
-  Finder.addMatcher(AnyLoopMatcher, &DataIterClassifier);
-
-  ArrayIterClassifier ArrayIterClassifier;
-  Finder.addMatcher(AnyLoopMatcher, &ArrayIterClassifier);
+  FunctionCallback FC;
+  Finder.addMatcher(FunctionMatcher, &FC);
 
   if (Tool.run(newFrontendActionFactory(&Finder)) != 0) {
     return 1;
@@ -85,17 +52,20 @@ int main(int argc, const char **argv) {
 
   /* ----- Print stats ----- */
   if (LoopStats) {
+    llvm::errs() << "Preparing statistics...\n";
     std::cout.setf( std::ios::fixed, std:: ios::floatfield ); // floatfield set to fixed
     std::cout.precision(1);
     std::cout << "==============" << "\n";
     std::cout << "= STATISTICS =\n";
     std::cout << "==============" << "\n";
     std::ofstream myfile;
-    myfile.open ("unclassified.txt", std::ofstream::app);
+    myfile.open ("classifications_"+BenchName+".txt");
     std::map<std::string, int> Counter;
     for (auto Classification : Classifications) {
-      const Stmt *Stmt = Classification.first;
+      auto Loop = Classification.first;
       auto ClassList = Classification.second;
+
+      myfile << LoopLocationMap[Loop] << " ";
 
       int negClasses = 0;
       for (auto Class : ClassList) {
@@ -107,14 +77,18 @@ int main(int argc, const char **argv) {
         if(Class.find("!") != std::string::npos ||
            Class.find("?") != std::string::npos ||
            Class.find("Cond-") != std::string::npos ||
-           Class.find("Branch-") != std::string::npos) {
+           Class.find("Branch-") != std::string::npos ||
+           Class.find("SIMPLE") != std::string::npos) {
           negClasses++;
+        } else {
+          myfile << Class << " ";
         }
       }
+
+      myfile << "\n";
+
       if (ClassList.size() < (unsigned long) 3+negClasses) { // ANY, TYPE
         Counter["UNCLASSIFIED"]++;
-        myfile << Loops.find(Stmt)->second.Dump() << "\n";
-        myfile << "----------------------------------------------------------------------------------------------------\n";
       }
     }
     myfile.close();
@@ -128,32 +102,6 @@ int main(int argc, const char **argv) {
       std::cout << "\t" << (100.*Count/Counter[family]) << "%";
       std::cout << std::endl;
     }
-  }
-
-  if (PerLoopStats) {
-    std::ofstream myfile;
-    myfile.open ("loops.sql");
-    myfile << LoopInfo::DumpSQLCreate();
-    myfile << "INSERT INTO loops VALUES\n";
-    std::stringstream sstm;
-    for (auto Loop : Loops) {
-      sstm << Loop.second.DumpSQL() << ",\n";
-    }
-    std::string values = sstm.str();
-    values = values.substr(0, values.size()-2);
-    myfile << values << ";";
-    myfile.close();
-    /* std::cout << "==============" << "\n"; */
-    /* std::cout << "= STATISTICS =\n"; */
-    /* std::cout << "==============" << "\n"; */
-    /* std::map<llvm::FoldingSetNodeID, std::vector<std::string> >::iterator it; */
-    /* for (it = Classifications.begin(); it != Classifications.end(); ++it) { */
-    /*   std::cout << it->first.ComputeHash() << ": "; */
-    /*   for (std::vector<std::string>::iterator it2 = it->second.begin(); it2 != it->second.end(); ++it2) { */
-    /*     std::cout << *it2 << ", "; */
-    /*   } */
-    /*   std::cout << "\n"; */
-    /* } */
   }
 
   return 0;
