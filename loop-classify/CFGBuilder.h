@@ -117,6 +117,16 @@ class ControlDependenceGraph {
     std::map<const CFGBlock*, std::vector<const CFGBlock*>> Map;
 };
 
+static bool isTransitionBlock(const CFGBlock *Block) {
+  if (Block->size() == 0 &&    // no statements
+      Block->getTerminator() == NULL && Block->getLabel() == NULL &&
+      Block->succ_size() >= 1) // EXIT has 0
+    {
+      return true;
+    }
+  return false;
+}
+
 static const std::set<const CFGBlock*> getExitingTerminatorConditions(const std::set<const CFGBlock*> Blocks) {
   std::set<const CFGBlock*> Result;
   for (auto Block : Blocks) {
@@ -124,6 +134,7 @@ static const std::set<const CFGBlock*> getExitingTerminatorConditions(const std:
                                         E = Block->succ_end();
                                         I != E; I++) {
       const CFGBlock *Succ = *I;
+      if (isTransitionBlock(Succ)) continue;
       if (Blocks.count(Succ) == 0) {
         if (Block->getTerminatorCondition()) {
           Result.insert(Block);
@@ -148,12 +159,36 @@ class FunctionCallback : public MatchFinder::MatchCallback {
       AnalysisDeclContextManager mgr;
       AnalysisDeclContext *AC = mgr.getContext(D);
       CFG *CFG = AC->getCFG();
+
+      /* Clang builds "Transition" blocks for loop stmt (c.f. `CFG.cpp').
+       * Continue blocks will also point to this block, instead of the loop
+       * header. Thus only the arc Transition->Header will be recognized as a
+       * back edge, where potentially multiple back edges exist.
+       * As a workaround, for every "empty" block (= transition block), we
+       * introduce edges "jumping" past the transition block.
+       */
+      for (CFG::iterator it = CFG->begin(), end = CFG->end();
+                         it != end; it++) {
+        CFGBlock *Block = *it;
+        if (isTransitionBlock(Block)) {
+          CFGBlock *Succ = *Block->succ_begin();
+          // we found a transition block
+          for (CFGBlock::pred_iterator PI = Block->pred_begin(),
+                                      PE = Block->pred_end();
+                                      PI != PE; PI++) {
+            CFGBlock *Pred = *PI;
+            Pred->addSuccessor(Succ, CFG->getBumpVectorContext());
+            Pred->setLoopTarget(Block->getLoopTarget());
+          }
+        }
+      }
+
       DominatorTree Dom;
       Dom.buildDominatorTree(*AC);
       ControlDependenceGraph CDG;
       if (!CDG.buildControlDependenceGraph(*AC)) return;
 
-      for (CFG::const_iterator it = CFG->begin(); it != CFG->end(); it++) {
+      for (CFG::const_iterator it = CFG->begin(), end = CFG->end(); it != end; it++) {
         const CFGBlock *Tail = *it;
         for (CFGBlock::const_succ_iterator it2 = Tail->succ_begin(); it2 != Tail->succ_end(); it2++) {
           const CFGBlock *Header = *it2;
@@ -275,10 +310,17 @@ class FunctionCallback : public MatchFinder::MatchCallback {
             NaturalLoop *Loop = new NaturalLoop();
             NaturalLoop *Loop2 = new NaturalLoop();
             if (Loop->build(Header, Tail, Body, ControlVars, &TrackedStmts, &TrackedBlocks)) {
-              if (ViewSlice) Loop->view();
+              if (ViewSlice) {
+                llvm::errs() << "Back edge: ";
+                llvm::errs() << Tail->getBlockID();
+                llvm::errs() << "->";
+                llvm::errs() << Header->getBlockID();
+                llvm::errs() << "\n";
+                llvm::errs() << Loop->getLoopStmtMarker();
+                Loop->view();
+              }
               
-              SourceLocation SL = Loop->getLoopStmt()->getSourceRange().getBegin();
-              PresumedLoc PL = Result.SourceManager->getPresumedLoc(SL);
+              PresumedLoc PL = Loop->getLoopStmtLocation(Result.SourceManager);
               std::stringstream sstm;
               sstm << PL.getLine() << " " << D->getNameAsString() << " " << PL.getFilename();
               LoopLocationMap[Loop] = sstm.str();

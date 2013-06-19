@@ -120,24 +120,23 @@ class NaturalLoop {
           return "GOTO";
         case Stmt::IfStmtClass:
           return "IF";
+        case Stmt::ContinueStmtClass:
+          return "CONTINUE";
+        case Stmt::SwitchStmtClass:
+          return "SWITCH";
         default:
           llvm_unreachable("Unknown loop stmt.");
       }
     }
 
-    const Expr *getLoopStmtCondition() const {
-      switch (LoopStmt->getStmtClass()) {
-        case Stmt::ForStmtClass:
-          return cast<ForStmt>(LoopStmt)->getCond();
-        case Stmt::WhileStmtClass:
-          return cast<WhileStmt>(LoopStmt)->getCond();
-        case Stmt::DoStmtClass:
-          return cast<DoStmt>(LoopStmt)->getCond();
-        default:
-          // TODO
-          llvm_unreachable("Unknown loop stmt.");
+    PresumedLoc getLoopStmtLocation(const SourceManager* SM) const {
+      Stmt *S = LoopStmt;
+      if (GotoStmt *GS = dyn_cast<GotoStmt>(S)) {
+        S = GS->getLabel()->getStmt();
       }
-      return NULL;
+      SourceLocation SL = S->getSourceRange().getBegin();
+      PresumedLoc PL = SM->getPresumedLoc(SL);
+      return PL;
     }
 
     std::set<const VarDecl*> getControlVars() const {
@@ -239,13 +238,29 @@ bool NaturalLoop::build(const CFGBlock *Header, const CFGBlock *Tail,
   Exit = new NaturalLoopBlock(0);
   this->ControlVars = ControlVars;
 
+  // CONTINUE
+  if (const Stmt *Term = dyn_cast_or_null<ContinueStmt>(Tail->getTerminator().getStmt())) {
+    LoopStmt = const_cast<Stmt*>(Term);
+  } else {
+    // FOR, WHILE, DO-WHILE
   LoopStmt = const_cast<Stmt*>(Tail->getLoopTarget());
   if (!LoopStmt) {
+      if (dyn_cast_or_null<GotoStmt>(Tail->getTerminator().getStmt())) {
+        // GOTO
       LoopStmt = const_cast<Stmt*>(Tail->getTerminator().getStmt());
+      } else if (dyn_cast_or_null<IfStmt>(Header->getTerminator().getStmt())) {
+        // IF
+        LoopStmt = const_cast<Stmt*>(Header->getTerminator().getStmt());
+      }
+    }
   }
   if (!LoopStmt) {
+    llvm::errs() << Header->getBlockID();
+    llvm::errs() << " ";
+    llvm::errs() << Tail->getBlockID();
+    llvm::errs() << "\n";
+    Header->getParent()->viewCFG(LangOptions());
     llvm_unreachable("No loop stmt!");
-    /* Header->getParent()->viewCFG(LangOptions()); */
   }
 
   std::map<const CFGBlock*, NaturalLoopBlock*> Map;
