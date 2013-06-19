@@ -51,6 +51,11 @@ if [[ ${BENCH} == "setup" ]] ; then
     read
     $EDITOR stdio.h
 
+    # security_pgp_d
+    echo -n "\"#undef memmove\" einfügen"
+    read
+    $EDITOR ${BENCH_DIR}/cBench15032013/security_pgp_d/src/memmove.c
+
     # network_patricia
     wget ftp://ftp.irisa.fr/pub/OpenBSD/src/sys/sys/endian.h
 
@@ -84,18 +89,27 @@ if [[ $2 == "run" ]] ; then
     elif [[ ${BENCH} == "wcet" ]] ; then
         FILES=$(find ${BENCH_DIR}/wcet/ -not -name des.c -and -name '*.c')
     elif [[ ${BENCH} == "cBench" ]] ; then
-        FILES=$(find ${BENCH_DIR}/cBench15032013/ -not -name memmove.c -and -not -name interp.c -and -name '*.c')
+        FILES=$(find ${BENCH_DIR}/cBench15032013/ -name '*.c')
+
         INCLUDES=$(find ${BENCH_DIR}/cBench15032013/ -name '*.c' | xargs -L1 dirname | sort | uniq | sed 's/^/-I/' | tr '\n' ' ')
         # consumer_mad
         INCLUDES="$INCLUDES -I${BENCH_DIR}/esound-0.2.8 -I${BENCH_DIR}/audiofile-0.3.6/libaudiofile/"
         # consumer_mad & office_ghostscript
         INCLUDES="$INCLUDES -I${BENCH_DIR}"
+
         # automotive_{bitcount,qsort1}
         DEFINES="-DEXIT_FAILURE=1"
         # consumer_mad
-        DEFINES="$DEFINES -DFPM_DEFAULT -DHAVE_CONFIG_H"
-        # security_pgp_d
-        DEFINES="$DEFINES -DUNIX"
+        DEFINES="$DEFINES -DFPM_DEFAULT -DHAVE_CONFIG_H -DLOCALEDIR=\"/usr/local/share/locale\""
+        # consumer_lame
+        DEFINES="$DEFINES -DLAMESNDFILE -DHAVEMPGLIB -DLAMEPARSE"
+        # office_stringsearch1 / security_pgp_d
+        DEFINES="$DEFINES -DUNIX -DPORTABLE"
+        # telecom_gsm
+        DEFINES="$DEFINES -DSASR -DSTUPID_COMPILER -DNeedFunctionPrototypes=1"
+
+        # security_pgp_d/src/zdeflate -> defines i386
+        FLAGS="-m32"
     fi
     echo "BENCH\t$BENCH">$BENCH.stats
 
@@ -104,7 +118,7 @@ if [[ $2 == "run" ]] ; then
     LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -loop-stats"
     # LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -per-loop-stats"
     t0=`date +%s`
-    bin/loop-classify $FILES ${LOOP_CLASSIFY_ARGS} -debug -bench-name "$BENCH" -- -w $INCLUDES $DEFINES 2>&1 >$BENCH.stats | egrep -v '^Args:'
+    bin/loop-classify $FILES ${LOOP_CLASSIFY_ARGS} -debug -bench-name "$BENCH" -- -w $INCLUDES $DEFINES $FLAGS 2>&1 >$BENCH.stats | egrep -v '^Args:'
     t1=`date +%s`
     echo Elapsed $[$t1-$t0] >> $BENCH.stats
     # mv loops.sql ${BENCH}.sql
