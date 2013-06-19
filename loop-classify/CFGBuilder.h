@@ -131,8 +131,8 @@ static const std::set<const CFGBlock*> getExitingTerminatorConditions(const std:
   std::set<const CFGBlock*> Result;
   for (auto Block : Blocks) {
     for (CFGBlock::const_succ_iterator I = Block->succ_begin(),
-                                        E = Block->succ_end();
-                                        I != E; I++) {
+                                       E = Block->succ_end();
+                                       I != E; I++) {
       const CFGBlock *Succ = *I;
       if (isTransitionBlock(Succ)) continue;
       if (Blocks.count(Succ) == 0) {
@@ -339,6 +339,10 @@ class FunctionCallback : public MatchFinder::MatchCallback {
               // Branching
               BranchingClassifier B;
               B.classify(P);
+
+              // ControlVars
+              ControlVarClassifier CVC;
+              CVC.classify(P, ControlVars.size());
 
               // Simple Plans
               DataIterClassifier D;

@@ -44,3 +44,16 @@ class BranchingClassifier : public LoopClassifier {
       return;
     }
 };
+
+class ControlVarClassifier : public LoopClassifier {
+  public:
+    void classify(const NaturalLoopPair P, unsigned size) {
+      const NaturalLoop *Loop = P.first;
+
+      std::stringstream sstm;
+      sstm << size;
+
+      LoopClassifier::classify(Loop, Success, "ControlVars", sstm.str());
+      return;
+    }
+};

@@ -243,11 +243,11 @@ bool NaturalLoop::build(const CFGBlock *Header, const CFGBlock *Tail,
     LoopStmt = const_cast<Stmt*>(Term);
   } else {
     // FOR, WHILE, DO-WHILE
-  LoopStmt = const_cast<Stmt*>(Tail->getLoopTarget());
-  if (!LoopStmt) {
+    LoopStmt = const_cast<Stmt*>(Tail->getLoopTarget());
+    if (!LoopStmt) {
       if (dyn_cast_or_null<GotoStmt>(Tail->getTerminator().getStmt())) {
         // GOTO
-      LoopStmt = const_cast<Stmt*>(Tail->getTerminator().getStmt());
+        LoopStmt = const_cast<Stmt*>(Tail->getTerminator().getStmt());
       } else if (dyn_cast_or_null<IfStmt>(Header->getTerminator().getStmt())) {
         // IF
         LoopStmt = const_cast<Stmt*>(Header->getTerminator().getStmt());
