@@ -7,7 +7,7 @@ const char LoopName[] = "forLoop";
 const char FunctionName[] = "functionDecl";
 const char VarDeclName[] = "varDecl";
 
-const DeclarationMatcher FunctionMatcher = functionDecl().bind(FunctionName);
+const DeclarationMatcher FunctionMatcher = functionDecl(isDefinition()).bind(FunctionName);
 const StatementMatcher VarDeclRefMatcher = declRefExpr().bind(VarDeclName);
 const StatementMatcher DoStmtMatcher = doStmt().bind(LoopName);
 const StatementMatcher ForStmtMatcher = forStmt().bind(LoopName);

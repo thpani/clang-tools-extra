@@ -13,7 +13,7 @@ class DefUseHelper : public ConstStmtVisitor<DefUseHelper> {
     UseKind current_use;
     std::set<const VarDecl*> Uses, Defs, DefsAndUses;
     std::stack<const Stmt*> Edits;
-    std::map<const VarDecl*, std::vector<const Stmt*>> DefStmts;
+    std::map<const VarDecl*, std::set<const Stmt*>> DefStmts;
     const Stmt *Stmt;
 
     void RunAnalysis() {
@@ -30,6 +30,17 @@ class DefUseHelper : public ConstStmtVisitor<DefUseHelper> {
     bool isDef(const VarDecl *VD) {
       RunAnalysis();
       return std::find(Defs.begin(), Defs.end(), VD) != Defs.end();
+    }
+    bool isDefExclDecl(const VarDecl *VD) {
+      auto I = DefStmts.find(VD);
+      if (I != DefStmts.end()) {
+        for (const class Stmt *S : I->second) {
+          if (!isa<DeclStmt>(S)) {
+            return true;
+          }
+        }
+      }
+      return false;
     }
     bool isUse(const VarDecl *VD) {
       RunAnalysis();
@@ -53,9 +64,9 @@ class DefUseHelper : public ConstStmtVisitor<DefUseHelper> {
       }
       return DefsAndUses;
     }
-    std::vector<const class Stmt*> getDefiningStmts(const VarDecl *VD) {
+    std::set<const class Stmt*> getDefiningStmts(const VarDecl *VD) {
       if (DefStmts.find(VD) == DefStmts.end()) {
-        return std::vector<const class Stmt*>();
+        return std::set<const class Stmt*>();
       }
       return DefStmts.find(VD)->second;
     }
@@ -111,13 +122,13 @@ void sloopy::DefUseHelper::HandleDeclRefExpr(const DeclRefExpr *DR) {
       case Def:
         Defs.insert(VD);
         assert(Edits.size()>0);
-        DefStmts[VD].push_back(Edits.top());
+        DefStmts[VD].insert(Edits.top());
         break;
       case UseDef:
         Uses.insert(VD);
         Defs.insert(VD);
         assert(Edits.size()>0);
-        DefStmts[VD].push_back(Edits.top());
+        DefStmts[VD].insert(Edits.top());
         break;
     }
   }
@@ -130,7 +141,7 @@ void sloopy::DefUseHelper::HandleDeclStmt(const DeclStmt *DS) {
     if (const VarDecl* VD = dyn_cast<VarDecl> (*I)) {
       Defs.insert(VD);
       assert(Edits.size()>0);
-      DefStmts[VD].push_back(Edits.top());
+      DefStmts[VD].insert(Edits.top());
     }
   }
 }

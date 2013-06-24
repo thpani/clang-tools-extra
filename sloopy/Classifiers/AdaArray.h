@@ -11,11 +11,10 @@ class AdaArrayForLoopClassifier : public IncrementClassifier {
       return ::getIncrementInfo(Expr, Marker, Context, &isIntegerType);
     }
 
-    std::pair<std::string, const ValueDecl*> checkCond(const NaturalLoop *L, const IncrementInfo Increment) const throw (checkerror) {
+    std::pair<std::string, const ValueDecl*> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
       std::string Suffix;
 
       /* COND */
-      const Expr *Cond = (*L->getExit().pred_begin())->getCond();
       if (Cond == NULL) {
         throw checkerror(Unknown, Marker, "Cond_None");
       }

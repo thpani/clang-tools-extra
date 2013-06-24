@@ -1,6 +1,7 @@
-add_clang_executable(loop-classify
+set(LLVM_REQUIRES_EH 1)
+add_clang_executable(sloopy
     LoopClassify.cpp
     PseudoConstantAnalysis.cpp
   )
-target_link_libraries(loop-classify
+target_link_libraries(sloopy
   clangEdit clangTooling clangBasic clangAST clangASTMatchers)

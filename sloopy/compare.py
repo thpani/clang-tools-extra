@@ -24,7 +24,7 @@ lf = open(LLVM_FILE)
 sloopy_classifications = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
 
 for line in sf:
-    line, func, filepath, classes = line.split(' ', 3)
+    filepath, _, func, _, line, classes = line.split(' ', 5)
     line = int(line)
 
     filepath = './'+os.path.relpath(filepath, SLOOPY_ABS_START)
@@ -40,10 +40,16 @@ cvars = defaultdict(lambda: defaultdict(list))
 
 UNCLASS = 'unclas'
 SIMPLE = 'simple'
+SIMPLE_DETAILS = ('IntegerIter', 'DataIter', 'AArrayIter', 'PArrayIter')
 
+def isSimple(cls):
+    for simpleClass in SIMPLE_DETAILS:
+        if '@'+simpleClass in cls:
+            return True
+    return False
 def simplify(clsses):
     for cls in clsses:
-        if '@' in cls and not 'Branch' in cls and not 'ControlVars' in cls:
+        if isSimple(cls):
             return SIMPLE
     return UNCLASS
 
@@ -67,24 +73,23 @@ for line in lf:
                 # opname = '+' if op == operator.add else '-'
                 # print opname+str(d), filepath, func, line, term, bound, sc
                 for cls in sc:
-                    if '@' in cls:
-                        if 'Branch' in cls:
-                            # Branch-Depth-3-Nodes-6
-                            _, _, depth, _, nodes = cls.split('-')
-                            depth, nodes = (int(depth), int(nodes))
-                            if depth > 500:
-                                continue
-                            branch[term][bound]['depth'].append(depth)
-                            branch[term][bound]['nodes'].append(nodes)
-                        if 'ControlVars' in cls:
-                            # ControlVars-3
-                            _, num = cls.split('-')
-                            num = int(num)
-                            if num > 200:
-                                continue
-                            cvars[term][bound].append(num)
-                        else:
-                            results[term][bound][cls.split('@')[1]] += 1
+                    if 'Branch' in cls:
+                        # Branch-Depth-3-Nodes-6
+                        _, _, depth, _, nodes = cls.split('-')
+                        depth, nodes = (int(depth), int(nodes))
+                        if depth > 500:
+                            continue
+                        branch[term][bound]['depth'].append(depth)
+                        branch[term][bound]['nodes'].append(nodes)
+                    elif 'ControlVars' in cls:
+                        # ControlVars-3
+                        _, num = cls.split('-')
+                        num = int(num)
+                        if num > 200:
+                            continue
+                        cvars[term][bound].append(num)
+                    elif '@' in cls:
+                        results[term][bound][cls.split('@')[1]] += 1
                 results[term][bound][simplify(sc)] += 1
                 return True
         if x(operator.__sub__):
@@ -128,7 +133,7 @@ print
 print "Class distribution (SIMPLE details)"
 print "==================================="
 print "\t\t|YY\t|YN\t|NN\t|"
-for x in (UNCLASS, 'ADA', 'DataIter', 'AArrayIter', 'PArrayIter'):
+for x in (UNCLASS,) + SIMPLE_DETAILS:
     print "%-8s\t|" % x,
     for y in ('YY', 'YN', 'NN'):
         print results[y[0]][y[1]][x], "\t|",
@@ -161,6 +166,15 @@ for x in ('depth', 'nodes'):
     print
 print
 
+
+print "Simple Control Flow (EXIT block has 1 pred)"
+print "==========================================="
+print "YY\t|YN\t|NN\t|"
+for y in ('YY', 'YN', 'NN'):
+    print "%d\t|" % results[y[0]][y[1]]['SIMPLE'],
+print
+print
+
 print "Control Vars (sliced)"
 print "====================="
 print "\t\t|YY\t|YN\t|NN\t|"
@@ -173,5 +187,13 @@ print "stdev(count)\t|",
 for y in ('YY', 'YN', 'NN'):
     l = cvars[y[0]][y[1]]
     print "%.2f\t|" % stdev(l),
+print
+print
+
+print "Amortized"
+print "========="
+print "YY\t|YN\t|NN\t|"
+for y in ('YY', 'YN', 'NN'):
+    print "%d\t|" % results[y[0]][y[1]]['AmortA'],
 print
 print

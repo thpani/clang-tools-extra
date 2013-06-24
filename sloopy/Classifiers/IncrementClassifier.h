@@ -33,10 +33,14 @@ static IncrementInfo getIncrementInfo(const Expr *Expr, const std::string Marker
               const VarDecl *RRHS = getVariable(RHS->getRHS());
               const VarDecl *RLHS = getVariable(RHS->getLHS());
               if ((RRHS == VD && isIntegerConstant(RHS->getLHS(), Context)) ||
-                  (RLHS == VD && isIntegerConstant(RHS->getRHS(), Context)) ||
-                  (RRHS == VD && isIntegerVariable(RHS->getLHS())) ||
-                  (RLHS == VD && isIntegerVariable(RHS->getRHS()))) {
+                  (RLHS == VD && isIntegerConstant(RHS->getRHS(), Context))) {
                 return { VD, BOP, NULL };
+              }
+              if (RRHS == VD && isIntegerVariable(RHS->getLHS())) {
+                return { VD, BOP, getIntegerVariable(RHS->getLHS()) };
+              }
+              if (RLHS == VD && isIntegerVariable(RHS->getRHS())) {
+                return { VD, BOP, getIntegerVariable(RHS->getRHS()) };
               }
             }
           }
@@ -70,7 +74,7 @@ class IncrementClassifier : public LoopClassifier {
         LoopVariableFinder(const IncrementClassifier *Outer) : Outer(Outer) {}
         const std::vector<IncrementInfo> findLoopVarCandidates(const NaturalLoop *Loop) {
           for (auto Block : *Loop) {
-            TraverseStmt(const_cast<Expr*>(Block->getCond()));
+            TraverseStmt(const_cast<Expr*>(Block->getTerminatorCondition()));
             for (auto S : *Block) {
               TraverseStmt(const_cast<Stmt*>(S));
             }
@@ -113,51 +117,62 @@ class IncrementClassifier : public LoopClassifier {
     const std::string Marker;
 
     virtual IncrementInfo getIncrementInfo(const Expr *Expr) const throw (checkerror) = 0;
-    virtual std::pair<std::string, const ValueDecl*> checkCond(const NaturalLoop *L, const IncrementInfo I) const throw (checkerror) = 0;
+    virtual std::pair<std::string, const ValueDecl*> checkCond(const Expr *Cond, const IncrementInfo I) const throw (checkerror) = 0;
+    virtual bool checkPreds(const NaturalLoop *Loop) const {
+      unsigned PredSize = Loop->getExit().pred_size();
+      assert(PredSize > 0);
+      if (PredSize > 1) {
+        return false;
+      }
+      return true;
+    }
 
   public:
     IncrementClassifier(const std::string Marker) : LoopClassifier(), Marker(Marker) {}
     virtual ~IncrementClassifier() {}
 
-    bool classify(const NaturalLoopPair P) {
-      const NaturalLoop *Loop = P.first;
-
+    IncrementInfo classify(const NaturalLoop *Loop) const {
       LoopVariableFinder Finder(this);
       auto LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
 
       if (LoopVarCandidates.size() == 0) {
         LoopClassifier::classify(Loop, Fail, Marker, "NoLoopVarCandidate");
-        return false;
+        return {NULL, NULL, NULL};
       }
 
-      unsigned PredSize = Loop->getExit().pred_size();
-      if (PredSize > 1) {
+      if (!checkPreds(Loop)) {
         LoopClassifier::classify(Loop, Fail, Marker, "TooManyExitArcs");
-        return false;
+        return {NULL, NULL, NULL};
       }
-      assert(PredSize > 0);
 
       std::vector<std::string> reasons;
       for (auto I : LoopVarCandidates) {
-        try {
-          auto result = checkCond(Loop, I);
-          std::string suffix = result.first;
-          const ValueDecl *BoundVar = result.second;
+        for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
+                                                    PE = Loop->getExit().pred_end();
+                                                    PI != PE; PI++) {
+          try {
+            const Expr *Cond = (*PI)->getTerminatorCondition();
+            auto result = checkCond(Cond, I);
+            std::string suffix = result.first;
+            const ValueDecl *BoundVar = result.second;
 
-          PseudoConstantSet.clear();
-          for (auto VD : Loop->getControlVars()) {
-            if (VD == I.VD) continue;
-            if (VD == BoundVar && BoundVar == I.VD) continue;
-            std::string name = I.VD == BoundVar ? "N" : (I.VD == I.Delta ? "D" : "X");
-            /* std::string name = I.VD == BoundVar ? "N" : (I.VD == I.Delta ? "D" : VD->getNameAsString()); */
-            addPseudoConstantVar(name, VD);
+            PseudoConstantSet.clear();
+            /* for (auto VD : Loop->getControlVars()) { */
+            DefUseHelper CondDUH(Cond);
+            for (auto VD : CondDUH.getDefsAndUses()) {
+              if (VD == I.VD) continue;
+              if (VD == BoundVar && BoundVar == I.VD) continue;
+              std::string name = I.VD == BoundVar ? "N" : (I.VD == I.Delta ? "D" : "X");
+              /* std::string name = I.VD == BoundVar ? "N" : (I.VD == I.Delta ? "D" : VD->getNameAsString()); */
+              addPseudoConstantVar(name, VD);
+            }
+            checkPseudoConstantSet(Loop);
+
+            LoopClassifier::classify(Loop, Success, Marker, suffix);
+            return I;
+          } catch(checkerror &e) {
+            reasons.push_back(e.what());
           }
-          checkPseudoConstantSet(Loop);
-
-          LoopClassifier::classify(Loop, Success, Marker, suffix);
-          return true;
-        } catch(checkerror &e) {
-          reasons.push_back(e.what());
         }
       }
       std::sort(reasons.begin(), reasons.end());
@@ -173,7 +188,7 @@ class IncrementClassifier : public LoopClassifier {
       assert(suffix.size()!=0);
 
       LoopClassifier::classify(Loop, suffix);
-      return false;
+      return {NULL, NULL, NULL};
     }
 };
 #endif // _INCREMENT_CLASSIFIER_H_

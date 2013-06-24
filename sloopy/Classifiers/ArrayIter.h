@@ -9,7 +9,7 @@ class ArrayIterClassifier : public IncrementClassifier {
       return ::getIncrementInfo(Expr, Marker, Context, &isPointerType);
     }
 
-    std::pair<std::string, const ValueDecl*> checkCond(const NaturalLoop *L, const IncrementInfo Increment) const throw (checkerror) {
+    std::pair<std::string, const ValueDecl*> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
       // TODO
       return std::pair<std::string, const ValueDecl*>(std::string(), NULL);
     }

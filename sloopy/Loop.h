@@ -12,6 +12,38 @@ using namespace clang;
 
 namespace sloopy {
 
+class MergedLoopDescriptor {
+  public:
+  const CFGBlock *Header;
+  std::set<const CFGBlock*> Tails;
+  std::set<const CFGBlock*> Body;
+  std::vector<const MergedLoopDescriptor*> NestedLoops, ProperlyNestedLoops, NestingLoops;
+  MergedLoopDescriptor(
+    const CFGBlock *Header,
+    std::set<const CFGBlock*> Tails,
+    std::set<const CFGBlock*> Body) : Header(Header), Tails(Tails), Body(Body) {}
+  void addNestedLoop(MergedLoopDescriptor *D) {
+    NestedLoops.push_back(D);
+    D->NestingLoops.push_back(this);
+    ProperlyNestedLoops.push_back(D);
+  }
+  void addTriviallyNestedLoop(MergedLoopDescriptor *D) {
+    NestedLoops.push_back(D);
+    D->NestingLoops.push_back(this);
+  }
+  bool operator< (const MergedLoopDescriptor &Other) const {
+    return (this->Header < Other.Header);
+  }
+};
+struct LoopDescriptor {
+  const CFGBlock *Header, *Tail;
+  std::set<const CFGBlock*> Body;
+};
+struct SlicingCriterion {
+  const std::set<const VarDecl*> Vars;
+  const std::set<const CFGBlock*> Locations;
+};
+
 class NaturalLoopBlock;
 
 class NaturalLoop {
@@ -21,13 +53,17 @@ class NaturalLoop {
     std::set<const VarDecl*> ControlVars;
     Stmt *LoopStmt;
     std::string Identifier;
+    NaturalLoop *Unsliced;
   public:
     ~NaturalLoop();
-    bool build(const CFGBlock *Header, const CFGBlock *Tail,
+    bool build(
+        const CFGBlock *Header,
+        const std::set<const CFGBlock*> Tails,
         const std::set<const CFGBlock*> Blocks,
         const std::set<const VarDecl*> ControlVars,
         const std::set<const Stmt*> *TrackedStmts = NULL,
-        const std::set<const CFGBlock*> *TrackedBlocks = NULL);
+        const std::set<const CFGBlock*> *TrackedBlocks = NULL,
+        const NaturalLoop *Unsliced = NULL);
     void dump() const;
     void view(const LangOptions &LO = LangOptions()) const;
     void write(const LangOptions &LO = LangOptions()) const;
@@ -104,8 +140,11 @@ class NaturalLoop {
     }
     unsigned size() const { return Blocks.size(); }
 
-    const Stmt *getLoopStmt() const {
-      return LoopStmt;
+    Stmt *getLoopStmt() { return LoopStmt; }
+    const Stmt *getLoopStmt() const { return LoopStmt; }
+    
+    const NaturalLoop *getUnsliced() const {
+      return Unsliced ? Unsliced : this;
     }
 
     std::string getLoopStmtMarker() const {
@@ -144,21 +183,39 @@ class NaturalLoop {
     }
 };
 
+class NaturalLoopTerminator {
+  const Stmt *S;
+
+  public:
+  NaturalLoopTerminator(const Stmt *S) : S(S) {}
+
+  const Stmt *getStmt() const { return S; }
+
+  operator const Stmt *() const { return getStmt(); }
+
+  const Stmt *operator->() const { return getStmt(); }
+
+  const Stmt &operator*() const { return *getStmt(); }
+
+  LLVM_EXPLICIT operator bool() const { return getStmt(); }
+};
+
 class NaturalLoopBlock {
   private:
     friend class NaturalLoop;
     
     const unsigned BlockID;
-    const Expr *Cond;
+    const Stmt *Label;
+    const NaturalLoopTerminator Terminator;
 
     std::list<const Stmt*> Stmts;
     std::set<NaturalLoopBlock *> Succs, Preds;
   public:
-    NaturalLoopBlock(unsigned BlockID, const Expr *Cond = NULL) :
-      BlockID(BlockID), Cond(Cond) {}
+    NaturalLoopBlock(unsigned BlockID, const Stmt *LabelStmt = NULL, const Stmt *TerminatorStmt = NULL) :
+      BlockID(BlockID), Label(LabelStmt), Terminator(TerminatorStmt) {}
 
     unsigned getBlockID() const { return BlockID; }
-    const Expr *getCond() const { return Cond; }
+    const NaturalLoopTerminator getTerminator() const { return Terminator; }
 
     typedef std::list<const Stmt*>::iterator                      iterator;
     typedef std::list<const Stmt*>::const_iterator                const_iterator;
@@ -194,6 +251,71 @@ class NaturalLoopBlock {
 
     unsigned                     pred_size()   const { return Preds.size();    }
     bool                         pred_empty()  const { return Preds.empty();   }
+
+    const Stmt *getLabel() const {
+      return Label;
+    }
+    const Expr *getTerminatorCondition() const {
+      Stmt *Terminator = const_cast<Stmt*>(this->Terminator.getStmt());
+      if (!Terminator)
+        return NULL;
+
+      Expr *E = NULL;
+
+      switch (Terminator->getStmtClass()) {
+        default:
+          break;
+
+        case Stmt::CXXForRangeStmtClass:
+          E = cast<CXXForRangeStmt>(Terminator)->getCond();
+          break;
+
+        case Stmt::ForStmtClass:
+          E = cast<ForStmt>(Terminator)->getCond();
+          break;
+
+        case Stmt::WhileStmtClass:
+          E = cast<WhileStmt>(Terminator)->getCond();
+          break;
+
+        case Stmt::DoStmtClass:
+          E = cast<DoStmt>(Terminator)->getCond();
+          break;
+
+        case Stmt::IfStmtClass:
+          E = cast<IfStmt>(Terminator)->getCond();
+          break;
+
+        case Stmt::ChooseExprClass:
+          E = cast<ChooseExpr>(Terminator)->getCond();
+          break;
+
+        case Stmt::IndirectGotoStmtClass:
+          E = cast<IndirectGotoStmt>(Terminator)->getTarget();
+          break;
+
+        case Stmt::SwitchStmtClass:
+          E = cast<SwitchStmt>(Terminator)->getCond();
+          break;
+
+        case Stmt::BinaryConditionalOperatorClass:
+          E = cast<BinaryConditionalOperator>(Terminator)->getCond();
+          break;
+
+        case Stmt::ConditionalOperatorClass:
+          E = cast<ConditionalOperator>(Terminator)->getCond();
+          break;
+
+        case Stmt::BinaryOperatorClass: // '&&' and '||'
+          E = cast<BinaryOperator>(Terminator)->getLHS();
+          break;
+
+/*         case Stmt::ObjCForCollectionStmtClass: */
+/*           return Terminator; */
+      }
+
+      return E ? E->IgnoreParens() : NULL;
+    }
 };
 
 inline void WriteAsOperand(raw_ostream &OS, const NaturalLoopBlock *BB, bool t) {
@@ -224,42 +346,52 @@ void NaturalLoop::dump() const {
   }
 }
 
-bool NaturalLoop::build(const CFGBlock *Header, const CFGBlock *Tail,
+bool NaturalLoop::build(
+    const CFGBlock *Header,
+    const std::set<const CFGBlock*> Tails,
     const std::set<const CFGBlock*> CFGBlocks,
     const std::set<const VarDecl*> ControlVars,
     const std::set<const Stmt*> *TrackedStmts, 
-    const std::set<const CFGBlock*> *TrackedBlocks) {
+    const std::set<const CFGBlock*> *TrackedBlocks,
+    const NaturalLoop *Unsliced) {
 
 
   assert(TrackedStmts != NULL || TrackedBlocks == NULL);
   assert(TrackedStmts == NULL || TrackedBlocks != NULL);
+  assert(Tails.size() > 0);
 
   Entry = new NaturalLoopBlock(-1);
   Exit = new NaturalLoopBlock(0);
   this->ControlVars = ControlVars;
+  this->Unsliced = const_cast<NaturalLoop*>(Unsliced);
 
-  // CONTINUE
-  if (const Stmt *Term = dyn_cast_or_null<ContinueStmt>(Tail->getTerminator().getStmt())) {
-    LoopStmt = const_cast<Stmt*>(Term);
-  } else {
-    // FOR, WHILE, DO-WHILE
-    LoopStmt = const_cast<Stmt*>(Tail->getLoopTarget());
-    if (!LoopStmt) {
-      if (dyn_cast_or_null<GotoStmt>(Tail->getTerminator().getStmt())) {
-        // GOTO
-        LoopStmt = const_cast<Stmt*>(Tail->getTerminator().getStmt());
-      } else if (dyn_cast_or_null<IfStmt>(Header->getTerminator().getStmt())) {
-        // IF
-        LoopStmt = const_cast<Stmt*>(Header->getTerminator().getStmt());
+  const CFGBlock *Tail = *Tails.begin();
+  // FOR, WHILE, DO-WHILE
+  LoopStmt = const_cast<Stmt*>(Tail->getLoopTarget());
+  if (!LoopStmt) {
+    unsigned nonGotoBlocks = 0;
+    for (const CFGBlock *Tail : Tails) {
+      if (const GotoStmt *GS = dyn_cast_or_null<GotoStmt>(Tail->getTerminator().getStmt())) {
+      LoopStmt = const_cast<GotoStmt*>(GS);
+      } else {
+        nonGotoBlocks++;
       }
     }
+    assert(nonGotoBlocks <= 1);
+    // GOTO
+    /* } else if (dyn_cast_or_null<IfStmt>(Header->getTerminator().getStmt())) { */
+    /*   // IF */
+    /*   /1* for (auto T : Tails) { *1/ */
+    /*   /1*   llvm::errs() << T->getBlockID(); *1/ */
+    /*   /1*   llvm::errs() << " "; *1/ */
+    /*   /1* } *1/ */
+    /*   /1* llvm::errs() << "\n"; *1/ */
+    /*   Header->getParent()->viewCFG(LangOptions()); */
+    /*   assert(Tails.size() == 1); */
+    /*   LoopStmt = const_cast<Stmt*>(Header->getTerminator().getStmt()); */
+    /* } */
   }
   if (!LoopStmt) {
-    llvm::errs() << Header->getBlockID();
-    llvm::errs() << " ";
-    llvm::errs() << Tail->getBlockID();
-    llvm::errs() << "\n";
-    Header->getParent()->viewCFG(LangOptions());
     llvm_unreachable("No loop stmt!");
   }
 
@@ -267,10 +399,10 @@ bool NaturalLoop::build(const CFGBlock *Header, const CFGBlock *Tail,
 
   // construct blocks with stmts
   for (auto Current : CFGBlocks) {
-    const Expr *Cond =
+    const Stmt *S =
       TrackedBlocks != NULL && TrackedBlocks->count(Current) == 0 ?
-      NULL : cast_or_null<Expr>(Current->getTerminatorCondition());
-    NaturalLoopBlock *CBlock = new NaturalLoopBlock(Current->getBlockID(), Cond);
+      NULL : Current->getTerminator();
+    NaturalLoopBlock *CBlock = new NaturalLoopBlock(Current->getBlockID(), Current->getLabel(), S);
     for (auto Element : *Current) {
       auto CStmt = Element.getAs<CFGStmt>();
       assert(CStmt);
@@ -322,7 +454,7 @@ bool NaturalLoop::build(const CFGBlock *Header, const CFGBlock *Tail,
         BI++;
         continue;
       }
-      if (Current->begin() == Current->end() && Current->getCond() == NULL) {
+      if (Current->begin() == Current->end() && Current->getTerminator().getStmt() == NULL) {
         // no stmts in this block
         for (NaturalLoopBlock::const_pred_iterator I = Current->pred_begin(),
                                                    E = Current->pred_end();
@@ -384,7 +516,7 @@ typedef std::pair<const NaturalLoop*, const NaturalLoop*> NaturalLoopPair;
 
 using namespace sloopy;
 
-std::map<const NaturalLoop*, std::vector<std::string> > Classifications;
+std::map<const NaturalLoop*, std::set<std::string> > Classifications;
 
 //===----------------------------------------------------------------------===//
 // CFG pretty printing (CFG.cpp)
@@ -720,38 +852,38 @@ static void print_block(raw_ostream &OS, const NaturalLoop* cfg,
     OS.resetColor();
 
   // Print the label of this block.
-  /* if (Stmt *Label = const_cast<Stmt*>(B.getLabel())) { */
+  if (Stmt *Label = const_cast<Stmt*>(B.getLabel())) {
 
-  /*   if (print_edges) */
-  /*     OS << "  "; */
+    if (print_edges)
+      OS << "  ";
 
-  /*   if (LabelStmt *L = dyn_cast<LabelStmt>(Label)) */
-  /*     OS << L->getName(); */
-  /*   else if (CaseStmt *C = dyn_cast<CaseStmt>(Label)) { */
-  /*     OS << "case "; */
-  /*     C->getLHS()->printPretty(OS, Helper, */
-  /*                              PrintingPolicy(Helper->getLangOpts())); */
-  /*     if (C->getRHS()) { */
-  /*       OS << " ... "; */
-  /*       C->getRHS()->printPretty(OS, Helper, */
-  /*                                PrintingPolicy(Helper->getLangOpts())); */
-  /*     } */
-  /*   } else if (isa<DefaultStmt>(Label)) */
-  /*     OS << "default"; */
-  /*   else if (CXXCatchStmt *CS = dyn_cast<CXXCatchStmt>(Label)) { */
-  /*     OS << "catch ("; */
-  /*     if (CS->getExceptionDecl()) */
-  /*       CS->getExceptionDecl()->print(OS, PrintingPolicy(Helper->getLangOpts()), */
-  /*                                     0); */
-  /*     else */
-  /*       OS << "..."; */
-  /*     OS << ")"; */
+    if (LabelStmt *L = dyn_cast<LabelStmt>(Label))
+      OS << L->getName();
+    else if (CaseStmt *C = dyn_cast<CaseStmt>(Label)) {
+      OS << "case ";
+      C->getLHS()->printPretty(OS, Helper,
+                               PrintingPolicy(Helper->getLangOpts()));
+      if (C->getRHS()) {
+        OS << " ... ";
+        C->getRHS()->printPretty(OS, Helper,
+                                 PrintingPolicy(Helper->getLangOpts()));
+      }
+    } else if (isa<DefaultStmt>(Label))
+      OS << "default";
+    else if (CXXCatchStmt *CS = dyn_cast<CXXCatchStmt>(Label)) {
+      OS << "catch (";
+      if (CS->getExceptionDecl())
+        CS->getExceptionDecl()->print(OS, PrintingPolicy(Helper->getLangOpts()),
+                                      0);
+      else
+        OS << "...";
+      OS << ")";
 
-  /*   } else */
-  /*     llvm_unreachable("Invalid label statement in CFGBlock."); */
+    } else
+      llvm_unreachable("Invalid label statement in CFGBlock.");
 
-  /*   OS << ":\n"; */
-  /* } */
+    OS << ":\n";
+  }
 
   // Iterate through the statements in the block and print them.
   unsigned j = 1;
@@ -772,7 +904,7 @@ static void print_block(raw_ostream &OS, const NaturalLoop* cfg,
   }
 
   // Print the terminator of this block.
-  if (B.getCond()) {
+  if (B.getTerminator()) {
     if (ShowColors)
       OS.changeColor(raw_ostream::GREEN);
 
@@ -782,7 +914,7 @@ static void print_block(raw_ostream &OS, const NaturalLoop* cfg,
 
     PrintingPolicy PP(Helper ? Helper->getLangOpts() : LangOptions());
     CFGBlockTerminatorPrint TPrinter(OS, Helper, PP);
-    TPrinter.Visit(const_cast<Expr*>(B.getCond()));
+    TPrinter.Visit(const_cast<Stmt*>(B.getTerminator().getStmt()));
     OS << '\n';
     
     if (ShowColors)
@@ -791,33 +923,33 @@ static void print_block(raw_ostream &OS, const NaturalLoop* cfg,
 
   if (print_edges) {
     // Print the predecessors of this block.
-    /* if (!B.pred_empty()) { */
-    /*   const raw_ostream::Colors Color = raw_ostream::BLUE; */
-    /*   if (ShowColors) */
-    /*     OS.changeColor(Color); */
-    /*   OS << "   Preds " ; */
-    /*   if (ShowColors) */
-    /*     OS.resetColor(); */
-    /*   OS << '(' << B.pred_size() << "):"; */
-    /*   unsigned i = 0; */
+    if (!B.pred_empty()) {
+      const raw_ostream::Colors Color = raw_ostream::BLUE;
+      if (ShowColors)
+        OS.changeColor(Color);
+      OS << "   Preds " ;
+      if (ShowColors)
+        OS.resetColor();
+      OS << '(' << B.pred_size() << "):";
+      unsigned i = 0;
 
-    /*   if (ShowColors) */
-    /*     OS.changeColor(Color); */
+      if (ShowColors)
+        OS.changeColor(Color);
       
-    /*   for (NaturalLoopBlock::const_pred_iterator I = B.pred_begin(), E = B.pred_end(); */
-    /*        I != E; ++I, ++i) { */
+      for (NaturalLoopBlock::const_pred_iterator I = B.pred_begin(), E = B.pred_end();
+           I != E; ++I, ++i) {
 
-    /*     if (i % 10 == 8) */
-    /*       OS << "\n     "; */
+        if (i % 10 == 8)
+          OS << "\n     ";
 
-    /*     OS << " B" << (*I)->getBlockID(); */
-    /*   } */
+        OS << " B" << (*I)->getBlockID();
+      }
       
-    /*   if (ShowColors) */
-    /*     OS.resetColor(); */
+      if (ShowColors)
+        OS.resetColor();
 
-    /*   OS << '\n'; */
-    /* } */
+      OS << '\n';
+    }
 
     // Print the successors of this block.
     if (!B.succ_empty()) {

@@ -58,13 +58,13 @@ static bool isIntegerConstant(const Expr *Expression, const ASTContext *Context)
   return false;
 }
 
-static llvm::APInt getIntegerConstant(const Expr *Expression, const ASTContext *Context) {
-  llvm::APSInt Result;
-  if (Expression->EvaluateAsInt(Result, const_cast<ASTContext&>(*Context))) {
-    return Result;
-  }
-  llvm_unreachable("no integer constant");
-}
+/* static llvm::APInt getIntegerConstant(const Expr *Expression, const ASTContext *Context) { */
+/*   llvm::APSInt Result; */
+/*   if (Expression->EvaluateAsInt(Result, const_cast<ASTContext&>(*Context))) { */
+/*     return Result; */
+/*   } */
+/*   llvm_unreachable("no integer constant"); */
+/* } */
 
 static const VarDecl *getVariable(const Expr *Expression) {
   if (Expression==NULL) return NULL;
@@ -153,47 +153,32 @@ static const ValueDecl *getIntegerField(const Expr *Expression) {
 // Suffix := Str | Str _ Suffix
 class LoopClassifier {
   public:
-    void classify(const NaturalLoop* Loop) {
-      Classifications[Loop].push_back(Loop->getLoopStmtMarker());
+    void classify(const NaturalLoop* Loop) const {
+      Classifications[Loop->getUnsliced()].insert(Loop->getLoopStmtMarker());
     }
-    void classify(const NaturalLoop* Loop, const std::string Reason) {
+    void classify(const NaturalLoop* Loop, const std::string Reason) const {
       std::string S = Loop->getLoopStmtMarker() + "@" + Reason;
-      Classifications[Loop].push_back(S);
+      Classifications[Loop->getUnsliced()].insert(S);
     }
-    void classify(const NaturalLoop* Loop, const ClassificationKind Kind, const std::string Marker, const std::string Suffix) {
+    void classify(const NaturalLoop* Loop, const ClassificationKind Kind, const std::string Marker, const std::string Suffix="") const {
       std::string S = Loop->getLoopStmtMarker() + "@" + reasonToString(Kind, Marker, Suffix);
-      Classifications[Loop].push_back(S);
+      Classifications[Loop->getUnsliced()].insert(S);
     }
 };
 
 class AnyLoopCounter {
   public:
-    void classify(const NaturalLoop* Loop) {
-      Classifications[Loop].push_back("ANY");
+    void classify(const NaturalLoop* Loop) const {
+      Classifications[Loop->getUnsliced()].insert("ANY");
     }
 };
 
 class SimpleLoopCounter : public LoopClassifier {
   public:
-    void classify(const NaturalLoop* Loop) {
+    void classify(const NaturalLoop* Loop) const {
       unsigned PredSize = Loop->getExit().pred_size();
       if (PredSize == 1) {
         LoopClassifier::classify(Loop, "SIMPLE");
-
-        unsigned negClasses=0;
-        for (auto Class : Classifications[Loop]) {
-          if(Class.find("!") != std::string::npos ||
-            Class.find("?") != std::string::npos ||
-            Class.find("Cond-") != std::string::npos ||
-            Class.find("Branch-") != std::string::npos ||
-            Class.find("ControlVars-") != std::string::npos ||
-            Class.find("SIMPLE") != std::string::npos) {
-            negClasses++;
-          }
-        }
-        if (Classifications[Loop].size() < (unsigned long) 3+negClasses) { // ANY, TYPE
-          /* Loop->write(); */
-        }
       }
     }
 };

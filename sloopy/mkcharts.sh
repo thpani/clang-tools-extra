@@ -113,12 +113,11 @@ if [[ $2 == "run" ]] ; then
     fi
     echo "BENCH\t$BENCH">$BENCH.stats
 
-    sed -i '' -e 's/\(.*FLAGS.*loop-classify.*\)-fno-exceptions\(.*\)/\1\2/' build.ninja
     ninja || exit 1
     LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -loop-stats"
     # LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -per-loop-stats"
     t0=`date +%s`
-    bin/loop-classify $FILES ${LOOP_CLASSIFY_ARGS} -debug -bench-name "$BENCH" -- -w $INCLUDES $DEFINES $FLAGS 2>&1 >$BENCH.stats | egrep -v '^Args:'
+    bin/sloopy $FILES ${LOOP_CLASSIFY_ARGS} -debug -bench-name "$BENCH" -- -w $INCLUDES $DEFINES $FLAGS 2>&1 >$BENCH.stats | egrep -v '^Args:'
     t1=`date +%s`
     echo Elapsed $[$t1-$t0] >> $BENCH.stats
     # mv loops.sql ${BENCH}.sql
@@ -127,7 +126,7 @@ fi
 
 cat_bench() {
     if [[ $1 == "*" ]] ; then
-        cat ${BENCH}.stats | sed 's/ADA/IntegerIter/g'
+        cat ${BENCH}.stats
     elif [[ $PREFIX == "" ]] ; then
         cat_bench '*' | egrep -v '@'
     else
