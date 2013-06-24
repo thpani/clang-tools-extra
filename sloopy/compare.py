@@ -107,7 +107,7 @@ print "==================================="
 print
 
 print "Class distribution (SIMPLE overview)"
-print "==================================="
+print "===================================="
 print "\t|YY\t|YN\t|NN\t|"
 for x in (UNCLASS, SIMPLE):
     print x, "\t|",
@@ -190,10 +190,20 @@ for y in ('YY', 'YN', 'NN'):
 print
 print
 
-print "Amortized"
-print "========="
+print "Amortized A1 (inner loop counter incremented)"
+print "============================================="
 print "YY\t|YN\t|NN\t|"
 for y in ('YY', 'YN', 'NN'):
-    print "%d\t|" % results[y[0]][y[1]]['AmortA'],
+    print "%d\t|" % results[y[0]][y[1]]['AmortA1'],
 print
+print "Percentage of AmortA1 loops Loopus can bound: %.2f" % (1.*results['Y']['Y']['AmortA1']/(results['Y']['Y']['AmortA1']+results['N']['N']['AmortA1']+results['Y']['N']['AmortA1']))
+print
+
+print "Amortized A2 (inner loop counter never defined)"
+print "==============================================="
+print "YY\t|YN\t|NN\t|"
+for y in ('YY', 'YN', 'NN'):
+    print "%d\t|" % results[y[0]][y[1]]['AmortA2'],
+print
+print "Percentage of AmortA2 loops Loopus can bound: %.2f" % (1.*results['Y']['Y']['AmortA2']/(results['Y']['Y']['AmortA2']+results['N']['N']['AmortA2']+results['Y']['N']['AmortA2']))
 print

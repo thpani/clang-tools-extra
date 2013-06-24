@@ -1,3 +1,7 @@
+#ifndef LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_CLASSIFIERS_BRANCH_
+#define LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_CLASSIFIERS_BRANCH_
+#include "IncrementClassifier.h"
+
 class BranchingClassifier : public LoopClassifier {
   public:
     void classify(const NaturalLoop *Loop) {
@@ -91,6 +95,33 @@ class AmortizedTypeAClassifier : public LoopClassifier {
     return Block->getBlockID() == CurrentBlockID;
   }
   unsigned CurrentBlockID;
+
+  class SubExprVisitor : public RecursiveASTVisitor<SubExprVisitor> {
+    public:
+      SubExprVisitor(const ASTContext *Context) : Context(Context) {}
+      bool isVarIncremented(const VarDecl *VD, const Stmt *S) {
+        IncrementVD = const_cast<VarDecl*>(VD);
+        IsVarIncremented = false;
+        TraverseStmt(const_cast<Stmt*>(S));
+        return IsVarIncremented;
+      }
+
+      bool VisitExpr(Expr *Expr) {
+        try {
+          IncrementInfo OuterIncr = ::getIncrementInfo(Expr, "", Context, &isIntegerType);
+          if (OuterIncr.VD == IncrementVD) {
+            IsVarIncremented = true;
+            return false;
+          }
+        } catch (checkerror) {}
+        return true;
+      }
+
+    private:
+      bool IsVarIncremented;
+      VarDecl *IncrementVD;
+      const ASTContext *Context;
+  };
   public:
     void classify(const ASTContext* Context, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop) {
       if (Loop == OutermostNestingLoop) return;
@@ -98,6 +129,8 @@ class AmortizedTypeAClassifier : public LoopClassifier {
       const MultiExitAdaClassifier AFLC(Context);
       const IncrementInfo Increment = AFLC.classify(Loop);
       if (!Increment.VD) return;
+
+      SubExprVisitor SEV(Context);
 
       for (NaturalLoop::const_iterator I = OutermostNestingLoop->begin(),
                                        E = OutermostNestingLoop->end();
@@ -113,19 +146,52 @@ class AmortizedTypeAClassifier : public LoopClassifier {
                                               E = Block->end();
                                               I != E; I++) {
           const Stmt *S = *I;
-          DefUseHelper H(S);
-          const std::set<const Stmt*> Defs = H.getDefiningStmts(Increment.VD);
-          for (const Stmt *DefStmt : Defs) {
-            DefUseHelper DefH(DefStmt);
-            for (const VarDecl *DefUsedVD : DefH.getUses()) {
-              if (DefUsedVD != Increment.VD) {
-                // assign is symbolic (= reset)
-                return;
-              }
+          // there is >= 1 increment of the inner loop's counter
+          try {
+            if (SEV.isVarIncremented(Increment.VD, S)) {
+              LoopClassifier::classify(Loop, Success, "AmortA1");
+              return;
             }
-          }
+          } catch (checkerror) {}
         }
       }
-      LoopClassifier::classify(Loop, Success, "AmortA");
     }
 };
+
+class AmortizedTypeA2Classifier : public LoopClassifier {
+  bool IsCurrentBlock (const NaturalLoopBlock *Block) {
+    return Block->getBlockID() == CurrentBlockID;
+  }
+  unsigned CurrentBlockID;
+  public:
+    void classify(const ASTContext* Context, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop) {
+      if (Loop == OutermostNestingLoop) return;
+
+      const MultiExitAdaClassifier AFLC(Context);
+      const IncrementInfo Increment = AFLC.classify(Loop);
+      if (!Increment.VD) return;
+
+      for (NaturalLoop::const_iterator I = OutermostNestingLoop->begin(),
+                                       E = OutermostNestingLoop->end();
+                                       I != E; I++) {
+        const NaturalLoopBlock *Block = *I;
+        CurrentBlockID = Block->getBlockID();
+        if (std::find_if(Loop->begin(), Loop->end(), std::bind(&AmortizedTypeA2Classifier::IsCurrentBlock, this, std::placeholders::_1)) != Loop->end()) {
+          // block is in inner loop
+          continue;
+        }
+
+        for (NaturalLoopBlock::const_iterator I = Block->begin(),
+                                              E = Block->end();
+                                              I != E; I++) {
+          const Stmt *S = *I;
+          DefUseHelper H(S);
+          if (H.isDef(Increment.VD))
+            return;
+        }
+      }
+      LoopClassifier::classify(Loop, Success, "AmortA2");
+    }
+};
+
+#endif

@@ -389,6 +389,8 @@ void classify(
   InnerInfluencesOuterClassifier IIOC;
   IIOC.classify(D, SlicedOuterLoop);
 
+  AmortizedTypeA2Classifier ATA2C;
+  ATA2C.classify(Context, SlicedAllLoops, OutermostNestingLoop);
   AmortizedTypeAClassifier ATAC;
   ATAC.classify(Context, SlicedAllLoops, OutermostNestingLoop);
 
