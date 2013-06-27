@@ -35,6 +35,7 @@ llvm::cl::opt<bool> ViewSlicedOuter("view-sliced-outer");
 llvm::cl::opt<bool> ViewUnsliced("view-unsliced");
 llvm::cl::opt<bool> ViewCFG("view-cfg");
 llvm::cl::opt<bool> DumpBlocks("dump-blocks");
+llvm::cl::opt<bool> DumpIncrementVars("dump-increment-vars");
 llvm::cl::opt<bool> DumpControlVars("dump-control-vars");
 llvm::cl::opt<bool> DumpControlVarsDetail("dump-control-vars-detail");
 llvm::cl::opt<bool> DumpClasses("dump-classes");
@@ -348,10 +349,12 @@ static SlicingCriterion slicingCriterionAllLoops(const MergedLoopDescriptor &Loo
 }
 
 void classify(
+    const bool isSpecified,
     const MergedLoopDescriptor &D,
     const NaturalLoop *SlicedAllLoops,
     const NaturalLoop *SlicedOuterLoop,
     const NaturalLoop *OutermostNestingLoop,
+    const std::vector<const NaturalLoop*> NestingLoops,
     const ASTContext *Context) {
   // Any
   AnyLoopCounter ALC;
@@ -362,37 +365,46 @@ void classify(
   LoopCounter.classify(SlicedAllLoops);
 
   // Branching
-  BranchingClassifier B;
+  BranchingClassifier B("AllLoops");
   B.classify(SlicedAllLoops);
+  BranchingClassifier B2("OuterLoop");
+  B2.classify(SlicedOuterLoop);
 
   // ControlVars
-  ControlVarClassifier CVC;
+  ControlVarClassifier CVC("AllLoops");
   CVC.classify(SlicedAllLoops);
+  ControlVarClassifier CVC2("OuterLoop");
+  CVC2.classify(SlicedOuterLoop);
 
   // Simple Plans
   DataIterClassifier DIC;
   DIC.classify(SlicedOuterLoop);
   AdaArrayForLoopClassifier AA(Context);
-  IncrementInfo I = AA.classify(SlicedOuterLoop);
-  if (!I.VD) {
+  auto I = AA.classify(SlicedOuterLoop);
+  if (!I.size()) {
     AdaForLoopClassifier A(Context);
-    A.classify(SlicedOuterLoop);
+    auto Increments = A.classify(SlicedOuterLoop);
   }
   ArrayIterClassifier Ar(Context);
   Ar.classify(SlicedOuterLoop);
 
   // Test
   MultiExitAdaClassifier MEAC(Context);
-  MEAC.classify(SlicedAllLoops);
+  auto IMEAC = MEAC.classify(SlicedAllLoops);
+  if (isSpecified && DumpIncrementVars) {
+    for (auto I : IMEAC) {
+      llvm::errs() << "Increment var: " << I.VD->getNameAsString() << "\n";
+    }
+  }
 
   // Influence
   InnerInfluencesOuterClassifier IIOC;
   IIOC.classify(D, SlicedOuterLoop);
 
   AmortizedTypeA2Classifier ATA2C;
-  ATA2C.classify(Context, SlicedAllLoops, OutermostNestingLoop);
+  ATA2C.classify(Context, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
   AmortizedTypeAClassifier ATAC;
-  ATAC.classify(Context, SlicedAllLoops, OutermostNestingLoop);
+  ATAC.classify(Context, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
 
   // Simple control flow
   SimpleLoopCounter SLC;
@@ -573,9 +585,15 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         auto I = std::find_if(MLD.NestingLoops.begin(), MLD.NestingLoops.end(), isOutermostNestingLoop);
         assert(I != MLD.NestingLoops.end());
 
+        std::vector<const NaturalLoop*> NestingLoops;
+        for (auto I = MLD.NestingLoops.begin(),
+                  E = MLD.NestingLoops.end();
+                  I != E; I++) {
+          NestingLoops.push_back(M[**I][1]);
+        }
         const NaturalLoop *OutermostNestingLoop = M[**I][1];
 
-        classify(MLD, SlicedAllLoops, SlicedOuterLoop, OutermostNestingLoop, Result.Context);
+        classify(isSpecified(D, PL), MLD, SlicedAllLoops, SlicedOuterLoop, OutermostNestingLoop, NestingLoops, Result.Context);
 
         if (isSpecified(D, PL)) {
           if (DumpClasses) {
@@ -584,7 +602,7 @@ class FunctionCallback : public MatchFinder::MatchCallback {
             }
             llvm::errs() << "\n";
           }
-          if (DumpBlocks || DumpControlVars || DumpControlVarsDetail || DumpClasses || DumpAST || DumpStmt) {
+          if (DumpBlocks || DumpControlVars || DumpControlVarsDetail || DumpClasses || DumpAST || DumpStmt || DumpIncrementVars) {
             llvm::errs() << "----------\n";
           }
         }

@@ -178,7 +178,7 @@ class SimpleLoopCounter : public LoopClassifier {
     void classify(const NaturalLoop* Loop) const {
       unsigned PredSize = Loop->getExit().pred_size();
       if (PredSize == 1) {
-        LoopClassifier::classify(Loop, "SIMPLE");
+        LoopClassifier::classify(Loop, "SimpleCF");
       }
     }
 };

@@ -2,14 +2,13 @@
 
 import os.path
 import sys
-import operator
 from collections import defaultdict
 
 if sys.argv[1] == 'cBench':
     SLOOPY_ABS_START = '/Users/thomas/Documents/uni/da/llvm-build/bench/cBench15032013/'
     SLOOPY_FILE = 'classifications_cBench.txt'
-    LLVM_ABS_START = None
-    LLVM_FILE = 'summary_14062013.txt'
+    LLVM_ABS_START = '/files/sinn/cBench/'
+    LLVM_FILE = '24062013_summary.txt'
 elif sys.argv[1] == 'wcet':
     SLOOPY_ABS_START = '/Users/thomas/Documents/uni/da/llvm-build/bench/wcet/'
     SLOOPY_FILE = 'classifications_wcet.txt'
@@ -35,8 +34,8 @@ for line in sf:
     # print line, func, filepath, classes
 
 results = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
-branch = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-cvars = defaultdict(lambda: defaultdict(list))
+branch = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
+cvars = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
 UNCLASS = 'unclas'
 SIMPLE = 'simple'
@@ -54,7 +53,7 @@ def simplify(clsses):
     return UNCLASS
 
 for line in lf:
-    term, bound, line, func, filepath = line.split()
+    term, bound, line, linebe, func, filepath = line.split()
     line = int(line)
 
     if LLVM_ABS_START:
@@ -67,37 +66,30 @@ for line in lf:
 
     ok = False
     for d in range(line):
-        def x(op):
-            sc = sloopy_classifications[lookup_filename][func][op(line, d)]
-            if sc:
-                # opname = '+' if op == operator.add else '-'
-                # print opname+str(d), filepath, func, line, term, bound, sc
-                for cls in sc:
-                    if 'Branch' in cls:
-                        # Branch-Depth-3-Nodes-6
-                        _, _, depth, _, nodes = cls.split('-')
-                        depth, nodes = (int(depth), int(nodes))
-                        if depth > 500:
-                            continue
-                        branch[term][bound]['depth'].append(depth)
-                        branch[term][bound]['nodes'].append(nodes)
-                    elif 'ControlVars' in cls:
-                        # ControlVars-3
-                        _, num = cls.split('-')
-                        num = int(num)
-                        if num > 200:
-                            continue
-                        cvars[term][bound].append(num)
-                    elif '@' in cls:
-                        results[term][bound][cls.split('@')[1]] += 1
-                results[term][bound][simplify(sc)] += 1
-                return True
-        if x(operator.__sub__):
+        sc = sloopy_classifications[lookup_filename][func][line-d]
+        if sc:
+            # print '-'+str(d), filepath, func, line, term, bound, sc
+            for cls in sc:
+                if 'Branch' in cls:
+                    # Branch-Depth-3-Nodes-6
+                    c, _, depth, _, nodes = cls.split('-')
+                    depth, nodes = (int(depth), int(nodes))
+                    if depth > 500:
+                        continue
+                    branch[c.split('@')[1]][term][bound]['depth'].append(depth)
+                    branch[c.split('@')[1]][term][bound]['nodes'].append(nodes)
+                elif 'ControlVars' in cls:
+                    # ControlVars-3
+                    c, num = cls.split('-')
+                    num = int(num)
+                    if num > 200:
+                        continue
+                    cvars[c.split('@')[1]][term][bound].append(num)
+                elif '@' in cls:
+                    results[term][bound][cls.split('@')[1]] += 1
+            results[term][bound][simplify(sc)] += 1
             ok = True
             break
-        # if x(operator.__add__):
-        #     ok = True
-        #     break
     if not ok:
         print >> sys.stderr, '!!', filepath, func, line
 
@@ -120,14 +112,14 @@ for y in ('YY', 'YN', 'NN'):
 print
 print
 
-allU = sum([ results[y[0]][y[1]][UNCLASS] for y in ('YY', 'YN', 'NN') ])
-allS = sum([ results[y[0]][y[1]][SIMPLE] for y in ('YY', 'YN', 'NN') ])
-yyU = sum([ results[y[0]][y[1]][UNCLASS] for y in ('YY',) ])
-yyS = sum([ results[y[0]][y[1]][SIMPLE] for y in ('YY',) ])
-nU = sum([ results[y[0]][y[1]][UNCLASS] for y in ('YN', 'NN') ])
-nS = sum([ results[y[0]][y[1]][SIMPLE] for y in ('YN', 'NN') ])
-print "Percentage of simple loops Loopus can bound: %.2f" % (1.*yyS/allS)
-print "Percentage of unclassified loops Loopus can bound: %.2f" % (1.*yyU/allU)
+def sumall(c):
+    return sum([ results[y[0]][y[1]][c] for y in ('YY', 'YN', 'NN') ])
+
+def percent(c):
+    return 1. * results['Y']['Y'][c] / sumall(c)
+
+print "Percentage of simple loops Loopus can bound: %.2f" % percent(SIMPLE)
+print "Percentage of unclassified loops Loopus can bound: %.2f" % percent(UNCLASS)
 print
 
 print "Class distribution (SIMPLE details)"
@@ -150,60 +142,87 @@ def stdev(s):
     standard_deviation = math.sqrt(average(variance))
     return standard_deviation
 
-print "Branching (sliced)"
-print "=================="
-for x in ('depth', 'nodes'):
-    print "\t\t|YY\t|YN\t|NN\t|"
-    print "avg(%s)\t|" % x,
+def printb(type):
+    print "Branching (sliced %s)" % type
+    print "============================"
+    for x in ('depth', 'nodes'):
+        print "\t\t|YY\t|YN\t|NN\t|"
+        print "avg(%s)\t|" % x,
+        for y in ('YY', 'YN', 'NN'):
+            l = branch[type+'Branch'][y[0]][y[1]][x]
+            print "%.2f\t|" % average(l),
+        print
+        print "stdev(%s)\t|" % x,
+        for y in ('YY', 'YN', 'NN'):
+            l = branch[type+'Branch'][y[0]][y[1]][x]
+            print "%.2f\t|" % stdev(l),
+        print
+        for r in [(0, 1), (1, 2), (2, 3), (3, 10), (10, sys.maxint)]:
+            print x+" [%d, %s)\t|" % (r[0], str(r[1]) if r[1] != sys.maxint else "inf"),
+            for y in ('YY', 'YN', 'NN'):
+                s = sum(1 if r[0] <= depth and depth < r[1] else 0 for depth in branch[type+'Branch'][y[0]][y[1]][x])
+                print "%d\t|" % s,
+            print
+    print
+printb('AllLoops')
+printb('OuterLoop')
+
+def printresult(desc, key, underline='='):
+    print desc
+    print underline * len(desc)
+    print "YY\t|YN\t|NN\t|"
     for y in ('YY', 'YN', 'NN'):
-        l = branch[y[0]][y[1]][x]
+        print "%d\t|" % results[y[0]][y[1]][key],
+    print
+    print
+    print "Percentage of these loops Loopus can bound: %.2f" % percent(key)
+    print
+printresult("Simple Control Flow (EXIT block has 1 pred)", 'SimpleCF')
+printresult("Multi-exit IntegerIter", 'MultiExitIntegerIter')
+
+def controlv(type):
+    print "Control Vars (sliced %s)" % type
+    print "==============================="
+    print "\t\t|YY\t|YN\t|NN\t|"
+    print "avg(count)\t|",
+    for y in ('YY', 'YN', 'NN'):
+        l = cvars[type+'ControlVars'][y[0]][y[1]]
         print "%.2f\t|" % average(l),
     print
-    print "stdev(%s)\t|" % x,
+    print "stdev(count)\t|",
     for y in ('YY', 'YN', 'NN'):
-        l = branch[y[0]][y[1]][x]
+        l = cvars[type+'ControlVars'][y[0]][y[1]]
         print "%.2f\t|" % stdev(l),
     print
-print
+    for r in [(0, 1), (1, 2), (2, 3), (3, 10), (10, sys.maxint)]:
+        print "cnt [%d, %s)\t|" % (r[0], str(r[1]) if r[1] != sys.maxint else "inf"),
+        for y in ('YY', 'YN', 'NN'):
+            s = sum(1 if r[0] <= depth and depth < r[1] else 0 for depth in cvars[type+'ControlVars'][y[0]][y[1]])
+            print "%d\t|" % s,
+        print
+    print
+controlv('AllLoops')
+controlv('OuterLoop')
 
-
-print "Simple Control Flow (EXIT block has 1 pred)"
-print "==========================================="
+print "Outer loop influenced by inner (inner remains in slice)"
+print "=============================="
 print "YY\t|YN\t|NN\t|"
 for y in ('YY', 'YN', 'NN'):
-    print "%d\t|" % results[y[0]][y[1]]['SIMPLE'],
+    print "%d\t|" % results[y[0]][y[1]]['InfluencedByInner'],
 print
 print
-
-print "Control Vars (sliced)"
-print "====================="
-print "\t\t|YY\t|YN\t|NN\t|"
-print "avg(count)\t|",
-for y in ('YY', 'YN', 'NN'):
-    l = cvars[y[0]][y[1]]
-    print "%.2f\t|" % average(l),
-print
-print "stdev(count)\t|",
-for y in ('YY', 'YN', 'NN'):
-    l = cvars[y[0]][y[1]]
-    print "%.2f\t|" % stdev(l),
-print
+print "Percentage of these loops Loopus can bound: %.2f" % percent('InfluencedByInner')
 print
 
-print "Amortized A1 (inner loop counter incremented)"
-print "============================================="
-print "YY\t|YN\t|NN\t|"
-for y in ('YY', 'YN', 'NN'):
-    print "%d\t|" % results[y[0]][y[1]]['AmortA1'],
+print "Amortized Loops"
+print "==============="
 print
-print "Percentage of AmortA1 loops Loopus can bound: %.2f" % (1.*results['Y']['Y']['AmortA1']/(results['Y']['Y']['AmortA1']+results['N']['N']['AmortA1']+results['Y']['N']['AmortA1']))
+print "Inner loop is IntegerIter loop w/ the exception that"
+print "  - it may have >1 arcs leaving the loop, and"
+print "  - of the resp. conditions >= 1 takes the IntegerIter form."
 print
 
-print "Amortized A2 (inner loop counter never defined)"
-print "==============================================="
-print "YY\t|YN\t|NN\t|"
-for y in ('YY', 'YN', 'NN'):
-    print "%d\t|" % results[y[0]][y[1]]['AmortA2'],
-print
-print "Percentage of AmortA2 loops Loopus can bound: %.2f" % (1.*results['Y']['Y']['AmortA2']/(results['Y']['Y']['AmortA2']+results['N']['N']['AmortA2']+results['Y']['N']['AmortA2']))
-print
+printresult("Amortized A1 (inner loop counter incremented)", 'AmortA1', '-')
+printresult("Amortized A1 I_inner.VD = I_outer.VD", 'AmortA1InnerEqOuter', '-')
+printresult("Amortized A2 (inner loop counter never defined)", 'AmortA2', '-')
+printresult("Amortized A2 I_inner.VD = I_outer.VD", 'AmortA2InnerEqOuter', '-')

@@ -79,7 +79,7 @@ int main(int argc, const char **argv) {
            Class.find("Cond-") != std::string::npos ||
            Class.find("Branch-") != std::string::npos ||
            Class.find("ControlVars-") != std::string::npos ||
-           Class.find("SIMPLE") != std::string::npos) {
+           Class.find("SimpleCF") != std::string::npos) {
           negClasses++;
         }
         myfile << Class << " ";

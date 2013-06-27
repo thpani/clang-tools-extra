@@ -131,25 +131,27 @@ class IncrementClassifier : public LoopClassifier {
     IncrementClassifier(const std::string Marker) : LoopClassifier(), Marker(Marker) {}
     virtual ~IncrementClassifier() {}
 
-    IncrementInfo classify(const NaturalLoop *Loop) const {
+    std::vector<IncrementInfo> classify(const NaturalLoop *Loop) const {
       LoopVariableFinder Finder(this);
       auto LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
 
       if (LoopVarCandidates.size() == 0) {
         LoopClassifier::classify(Loop, Fail, Marker, "NoLoopVarCandidate");
-        return {NULL, NULL, NULL};
+        return std::vector<IncrementInfo>();
       }
 
       if (!checkPreds(Loop)) {
         LoopClassifier::classify(Loop, Fail, Marker, "TooManyExitArcs");
-        return {NULL, NULL, NULL};
+        return std::vector<IncrementInfo>();
       }
 
       std::vector<std::string> reasons;
-      for (auto I : LoopVarCandidates) {
-        for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
-                                                    PE = Loop->getExit().pred_end();
-                                                    PI != PE; PI++) {
+      std::vector<IncrementInfo> successes;
+      std::vector<std::string> suffixes;
+      for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
+                                                 PE = Loop->getExit().pred_end();
+                                                 PI != PE; PI++) {
+        for (const IncrementInfo I : LoopVarCandidates) {
           try {
             const Expr *Cond = (*PI)->getTerminatorCondition();
             auto result = checkCond(Cond, I);
@@ -157,7 +159,6 @@ class IncrementClassifier : public LoopClassifier {
             const ValueDecl *BoundVar = result.second;
 
             PseudoConstantSet.clear();
-            /* for (auto VD : Loop->getControlVars()) { */
             DefUseHelper CondDUH(Cond);
             for (auto VD : CondDUH.getDefsAndUses()) {
               if (VD == I.VD) continue;
@@ -168,12 +169,17 @@ class IncrementClassifier : public LoopClassifier {
             }
             checkPseudoConstantSet(Loop);
 
-            LoopClassifier::classify(Loop, Success, Marker, suffix);
-            return I;
+            successes.push_back(I);
+            suffixes.push_back(suffix);
           } catch(checkerror &e) {
             reasons.push_back(e.what());
           }
         }
+      }
+      if (successes.size()) {
+        // TODO concat unique suffixes
+        LoopClassifier::classify(Loop, Success, Marker, suffixes[0]);
+        return successes;
       }
       std::sort(reasons.begin(), reasons.end());
       std::vector<std::string>::iterator it = std::unique (reasons.begin(), reasons.end());
@@ -188,7 +194,7 @@ class IncrementClassifier : public LoopClassifier {
       assert(suffix.size()!=0);
 
       LoopClassifier::classify(Loop, suffix);
-      return {NULL, NULL, NULL};
+      return std::vector<IncrementInfo>();
     }
 };
 #endif // _INCREMENT_CLASSIFIER_H_
