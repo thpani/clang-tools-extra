@@ -11,7 +11,7 @@ class BaseAdaForLoopClassifier : public IncrementClassifier {
       return ::getIncrementInfo(Expr, Marker, Context, &isIntegerType);
     }
 
-    std::pair<std::string, const ValueDecl*> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
+    std::pair<std::string, ValueDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
       std::string Suffix;
 
       /* COND */
@@ -24,16 +24,16 @@ class BaseAdaForLoopClassifier : public IncrementClassifier {
        */
       const Expr *CondInner = Cond->IgnoreParenCasts();
       const ValueDecl *CondVar;
-      const ValueDecl *BoundVar;
+      ValueDeclIntPair Bound;
       if (const VarDecl *VD = getIntegerVariable(CondInner)) {
         CondVar = VD;
-        BoundVar = VD;
+        Bound = { VD, llvm::APInt() };
       }
       else if (const UnaryOperator *UO = dyn_cast<UnaryOperator>(CondInner)) {
         if (UO->isIncrementDecrementOp()) {
           if (const VarDecl *VD = getIntegerVariable(UO->getSubExpr())) {
             CondVar = VD;
-            BoundVar = VD;
+            Bound = { VD, llvm::APInt() };
           }
           else {
             throw checkerror(Unknown, Marker, "Cond_UnaryNoIntegerVar");
@@ -46,6 +46,8 @@ class BaseAdaForLoopClassifier : public IncrementClassifier {
       else if (const BinaryOperator *ConditionOp = dyn_cast<BinaryOperator>(CondInner)) {
         BinaryOperatorKind Opc = ConditionOp->getOpcode();
         if ((Opc >= BO_Mul && Opc <= BO_Shr) || ConditionOp->isComparisonOp()) {
+          const ValueDecl *BoundVar;
+
           if (!(ConditionOp->getLHS()->getType()->isIntegerType()))
             throw checkerror(Unknown, Marker, "Cond_LHS_NoInteger");
           if (!(ConditionOp->getRHS()->getType()->isIntegerType()))
@@ -86,10 +88,12 @@ class BaseAdaForLoopClassifier : public IncrementClassifier {
           else if (LHS != NULL && isIntegerConstant(ConditionOp->getRHS(), Context)) {
             // LHS is loop var, RHS is integer bound
             LoopVarLHS = true;
+            Bound = { NULL, getIntegerConstant(ConditionOp->getRHS(), Context) };
           }
           else if (RHS != NULL && isIntegerConstant(ConditionOp->getLHS(), Context)) {
             // RHS is loop var, LHS is integer bound
             LoopVarLHS = false;
+            Bound = { NULL, getIntegerConstant(ConditionOp->getLHS(), Context) };
           }
           else if (LHS != NULL && dyn_cast<UnaryExprOrTypeTraitExpr>(ConditionOp->getRHS()->IgnoreParenCasts())) {
             // LHS is loop var, RHS is sizeof() bound
@@ -120,6 +124,7 @@ class BaseAdaForLoopClassifier : public IncrementClassifier {
           }
           CondVar = LoopVarLHS ? LHS : RHS;
           BoundVar = LoopVarLHS ? RHS : LHS; // null if integer-literal, sizeof, ...
+          if (BoundVar) Bound = { BoundVar, llvm::APInt() };
         }
         else {
           throw checkerror(Unknown, Marker, "Cond_BinOp_OpNotSupported");
@@ -190,8 +195,7 @@ class BaseAdaForLoopClassifier : public IncrementClassifier {
       /* else { */
       /*   std::cout<<"$$$IRRED?!$$$"<<std::endl; */
       /* } */
-
-      return std::pair<std::string, const ValueDecl*>(Suffix, BoundVar);
+      return std::pair<std::string, ValueDeclIntPair>(Suffix, Bound);
     }
 
   public:

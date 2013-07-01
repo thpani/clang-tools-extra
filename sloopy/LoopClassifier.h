@@ -11,12 +11,6 @@
 using namespace clang;
 using namespace clang::tooling;
 
-struct IncrementInfo {
-  const VarDecl *VD;
-  const Stmt *Statement;
-  const VarDecl *Delta;
-};
-
 enum ClassificationKind {
   Fail,
   Success,
@@ -58,13 +52,13 @@ static bool isIntegerConstant(const Expr *Expression, const ASTContext *Context)
   return false;
 }
 
-/* static llvm::APInt getIntegerConstant(const Expr *Expression, const ASTContext *Context) { */
-/*   llvm::APSInt Result; */
-/*   if (Expression->EvaluateAsInt(Result, const_cast<ASTContext&>(*Context))) { */
-/*     return Result; */
-/*   } */
-/*   llvm_unreachable("no integer constant"); */
-/* } */
+static llvm::APInt getIntegerConstant(const Expr *Expression, const ASTContext *Context) {
+  llvm::APSInt Result;
+  if (Expression->EvaluateAsInt(Result, const_cast<ASTContext&>(*Context))) {
+    return Result;
+  }
+  llvm_unreachable("no integer constant");
+}
 
 static const VarDecl *getVariable(const Expr *Expression) {
   if (Expression==NULL) return NULL;

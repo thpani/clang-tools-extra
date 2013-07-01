@@ -94,8 +94,8 @@ if [[ $2 == "run" ]] ; then
         INCLUDES=$(find ${BENCH_DIR}/cBench15032013/ -name '*.c' | xargs -L1 dirname | sort | uniq | sed 's/^/-I/' | tr '\n' ' ')
         # consumer_mad
         INCLUDES="$INCLUDES -I${BENCH_DIR}/esound-0.2.8 -I${BENCH_DIR}/audiofile-0.3.6/libaudiofile/"
-        # consumer_mad & office_ghostscript
-        INCLUDES="$INCLUDES -I${BENCH_DIR}"
+        # consumer_mad & office_ghostscript & network_patricia
+        INCLUDES="$INCLUDES -I${BENCH_DIR}/include/"
 
         # automotive_{bitcount,qsort1}
         DEFINES="-DEXIT_FAILURE=1"

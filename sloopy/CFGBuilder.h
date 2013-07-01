@@ -389,11 +389,28 @@ void classify(
   Ar.classify(SlicedOuterLoop);
 
   // Test
+  MultiExitAdaIncrSetSizeClassifier MEAISSC;
+  MEAISSC.classify(Context, SlicedAllLoops);
+
   MultiExitAdaClassifier MEAC(Context);
   auto IMEAC = MEAC.classify(SlicedAllLoops);
   if (isSpecified && DumpIncrementVars) {
     for (auto I : IMEAC) {
-      llvm::errs() << "Increment var: " << I.VD->getNameAsString() << "\n";
+      llvm::errs() << "(incr: " << I.VD->getNameAsString() << ", ";
+      llvm::errs() << "bound: ";
+      if (I.Bound.Var) {
+        llvm::errs() << I.Bound.Var->getNameAsString();
+      } else {
+        llvm::errs() << I.Bound.Int.getSExtValue();
+      }
+      llvm::errs() << ", ";
+      llvm::errs() << "delta: ";
+      if (I.Delta.Var) {
+        llvm::errs() << I.Delta.Var->getNameAsString();
+      } else {
+        llvm::errs() << I.Delta.Int.getSExtValue();
+      }
+      llvm::errs() << ")\n";
     }
   }
 
@@ -405,6 +422,8 @@ void classify(
   ATA2C.classify(Context, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
   AmortizedTypeAClassifier ATAC;
   ATAC.classify(Context, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
+  AmortizedTypeBClassifier ATBC;
+  ATBC.classify(Context, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
 
   // Simple control flow
   SimpleLoopCounter SLC;

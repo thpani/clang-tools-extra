@@ -93,6 +93,19 @@ class MultiExitAdaClassifier : public BaseAdaForLoopClassifier {
     MultiExitAdaClassifier(const ASTContext *Context) : BaseAdaForLoopClassifier("MultiExitIntegerIter", Context) {}
 };
 
+class MultiExitAdaIncrSetSizeClassifier : public LoopClassifier {
+  public:
+  void classify(const ASTContext* Context, const NaturalLoop *Loop) {
+    const MultiExitAdaClassifier AFLC(Context);
+    auto IncrementSet = AFLC.classify(Loop);
+
+    std::stringstream sstm;
+    sstm << IncrementSet.size();
+
+    LoopClassifier::classify(Loop, Success, "MultiExitIntegerIterIncrSetSize", sstm.str());
+  }
+};
+
 class AmortizedTypeAClassifier : public LoopClassifier {
   bool IsCurrentBlock (const NaturalLoopBlock *Block) {
     return Block->getBlockID() == CurrentBlockID;
@@ -155,6 +168,7 @@ class AmortizedTypeAClassifier : public LoopClassifier {
               if (SEV.isVarIncremented(Increment.VD, S)) {
                 // Inner.VD = Outer.VD sub-classifier
                 for (const NaturalLoop *NestingLoop : NestingLoops) {
+                  if (NestingLoop == Loop) continue;
                   auto OuterIncrementSet = AFLC.classify(NestingLoop);
                   for (auto OuterI : OuterIncrementSet) {
                     if (OuterI.VD == Increment.VD) {
@@ -208,6 +222,7 @@ class AmortizedTypeA2Classifier : public LoopClassifier {
         }
         // Inner.VD = Outer.VD sub-classifier
         for (const NaturalLoop *NestingLoop : NestingLoops) {
+          if (NestingLoop == Loop) continue;
           auto OuterIncrementSet = AFLC.classify(NestingLoop);
           for (auto OuterI : OuterIncrementSet) {
             if (OuterI.VD == Increment.VD) {
@@ -219,6 +234,34 @@ class AmortizedTypeA2Classifier : public LoopClassifier {
         return;
 outer_loop:
         ; /* no op */
+      }
+    }
+};
+
+class AmortizedTypeBClassifier : public LoopClassifier {
+  bool IsCurrentBlock (const NaturalLoopBlock *Block) {
+    return Block->getBlockID() == CurrentBlockID;
+  }
+  unsigned CurrentBlockID;
+  public:
+    void classify(const ASTContext* Context, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) {
+      if (Loop == OutermostNestingLoop) return;
+
+      const MultiExitAdaClassifier AFLC(Context);
+      auto IncrementSet = AFLC.classify(Loop);
+      if (!IncrementSet.size()) return;
+
+      for (auto Increment : IncrementSet) {
+        for (const NaturalLoop* Outer : NestingLoops) {
+          if (Outer == Loop) continue;
+          auto OuterIncrementSet = AFLC.classify(Outer);
+          for (auto OuterIncrement : OuterIncrementSet) {
+            if (OuterIncrement.Delta == Increment.Bound) {
+              LoopClassifier::classify(Loop, Success, "AmortB");
+              return;
+            }
+          }
+        }
       }
     }
 };

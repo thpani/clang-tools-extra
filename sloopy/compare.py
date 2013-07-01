@@ -34,8 +34,7 @@ for line in sf:
     # print line, func, filepath, classes
 
 results = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
-branch = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
-cvars = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+branch = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
 UNCLASS = 'unclas'
 SIMPLE = 'simple'
@@ -76,15 +75,15 @@ for line in lf:
                     depth, nodes = (int(depth), int(nodes))
                     if depth > 500:
                         continue
-                    branch[c.split('@')[1]][term][bound]['depth'].append(depth)
-                    branch[c.split('@')[1]][term][bound]['nodes'].append(nodes)
-                elif 'ControlVars' in cls:
+                    branch[c.split('@')[1]+'depth'][term][bound].append(depth)
+                    branch[c.split('@')[1]+'nodes'][term][bound].append(nodes)
+                elif 'ControlVars' in cls or 'MultiExitIntegerIterIncrSetSize' in cls:
                     # ControlVars-3
                     c, num = cls.split('-')
                     num = int(num)
                     if num > 200:
                         continue
-                    cvars[c.split('@')[1]][term][bound].append(num)
+                    branch[c.split('@')[1]][term][bound].append(num)
                 elif '@' in cls:
                     results[term][bound][cls.split('@')[1]] += 1
             results[term][bound][simplify(sc)] += 1
@@ -97,6 +96,80 @@ print "==================================="
 print sys.argv[1]
 print "==================================="
 print
+
+def sumall(c):
+    return sum([ results[y[0]][y[1]][c] for y in ('YY', 'YN', 'NN') ])
+
+def percent(c):
+    return 1. * results['Y']['Y'][c] / sumall(c)
+
+def average(s):
+    return sum(s) * 1.0 / len(s)
+
+def stdev(s):
+    avg = average(s)
+    variance = map(lambda x: (x - avg)**2, s)
+    import math
+    standard_deviation = math.sqrt(average(variance))
+    return standard_deviation
+
+def printresult(desc, key, underline='='):
+    print desc
+    print underline * len(desc)
+    print "YY\t|YN\t|NN\t|"
+    for y in ('YY', 'YN', 'NN'):
+        print "%d\t|" % results[y[0]][y[1]][key],
+    print
+    print
+    print "Percentage of these loops Loopus can bound: %.2f" % percent(key)
+    print
+
+def distribution(type):
+    print type
+    print "==========================================="
+    print "\t\t|YY\t|YN\t|NN\t|"
+    print "avg(count)\t|",
+    for y in ('YY', 'YN', 'NN'):
+        l = branch[type][y[0]][y[1]]
+        print "%.2f\t|" % average(l),
+    print
+    print "stdev(count)\t|",
+    for y in ('YY', 'YN', 'NN'):
+        l = branch[type][y[0]][y[1]]
+        print "%.2f\t|" % stdev(l),
+    print
+    for r in [(0, 1), (1, 2), (2, 3), (3, 10), (10, sys.maxint)]:
+        print "cnt [%d, %s)\t|" % (r[0], str(r[1]) if r[1] != sys.maxint else "inf"),
+        for y in ('YY', 'YN', 'NN'):
+            s = sum(1 if r[0] <= depth and depth < r[1] else 0 for depth in branch[type][y[0]][y[1]])
+            print "%d\t|" % s,
+        print
+    print
+
+def printb(type):
+    print "Branching (sliced %s)" % type
+    print "============================"
+    for x in ('depth', 'nodes'):
+        print "\t\t|YY\t|YN\t|NN\t|"
+        print "avg(%s)\t|" % x,
+        for y in ('YY', 'YN', 'NN'):
+            l = branch[type+'Branch'+x][y[0]][y[1]]
+            print "%.2f\t|" % average(l),
+        print
+        print "stdev(%s)\t|" % x,
+        for y in ('YY', 'YN', 'NN'):
+            l = branch[type+'Branch'+x][y[0]][y[1]]
+            print "%.2f\t|" % stdev(l),
+        print
+        for r in [(0, 1), (1, 2), (2, 3), (3, 10), (10, sys.maxint)]:
+            print x+" [%d, %s)\t|" % (r[0], str(r[1]) if r[1] != sys.maxint else "inf"),
+            for y in ('YY', 'YN', 'NN'):
+                s = sum(1 if r[0] <= depth and depth < r[1] else 0 for depth in branch[type+'Branch'+x][y[0]][y[1]])
+                print "%d\t|" % s,
+            print
+    print
+
+printresult("Simple Control Flow (EXIT block has 1 pred)", 'SimpleCF')
 
 print "Class distribution (SIMPLE overview)"
 print "===================================="
@@ -112,12 +185,6 @@ for y in ('YY', 'YN', 'NN'):
 print
 print
 
-def sumall(c):
-    return sum([ results[y[0]][y[1]][c] for y in ('YY', 'YN', 'NN') ])
-
-def percent(c):
-    return 1. * results['Y']['Y'][c] / sumall(c)
-
 print "Percentage of simple loops Loopus can bound: %.2f" % percent(SIMPLE)
 print "Percentage of unclassified loops Loopus can bound: %.2f" % percent(UNCLASS)
 print
@@ -132,87 +199,15 @@ for x in (UNCLASS,) + SIMPLE_DETAILS:
     print
 print
 
-
-def average(s):
-    return sum(s) * 1.0 / len(s)
-def stdev(s):
-    avg = average(s)
-    variance = map(lambda x: (x - avg)**2, s)
-    import math
-    standard_deviation = math.sqrt(average(variance))
-    return standard_deviation
-
-def printb(type):
-    print "Branching (sliced %s)" % type
-    print "============================"
-    for x in ('depth', 'nodes'):
-        print "\t\t|YY\t|YN\t|NN\t|"
-        print "avg(%s)\t|" % x,
-        for y in ('YY', 'YN', 'NN'):
-            l = branch[type+'Branch'][y[0]][y[1]][x]
-            print "%.2f\t|" % average(l),
-        print
-        print "stdev(%s)\t|" % x,
-        for y in ('YY', 'YN', 'NN'):
-            l = branch[type+'Branch'][y[0]][y[1]][x]
-            print "%.2f\t|" % stdev(l),
-        print
-        for r in [(0, 1), (1, 2), (2, 3), (3, 10), (10, sys.maxint)]:
-            print x+" [%d, %s)\t|" % (r[0], str(r[1]) if r[1] != sys.maxint else "inf"),
-            for y in ('YY', 'YN', 'NN'):
-                s = sum(1 if r[0] <= depth and depth < r[1] else 0 for depth in branch[type+'Branch'][y[0]][y[1]][x])
-                print "%d\t|" % s,
-            print
-    print
+printresult("Multi-exit IntegerIter", 'MultiExitIntegerIter')
+distribution('MultiExitIntegerIterIncrSetSize')
 printb('AllLoops')
 printb('OuterLoop')
 
-def printresult(desc, key, underline='='):
-    print desc
-    print underline * len(desc)
-    print "YY\t|YN\t|NN\t|"
-    for y in ('YY', 'YN', 'NN'):
-        print "%d\t|" % results[y[0]][y[1]][key],
-    print
-    print
-    print "Percentage of these loops Loopus can bound: %.2f" % percent(key)
-    print
-printresult("Simple Control Flow (EXIT block has 1 pred)", 'SimpleCF')
-printresult("Multi-exit IntegerIter", 'MultiExitIntegerIter')
+distribution('AllLoopsControlVars')
+distribution('OuterLoopControlVars')
 
-def controlv(type):
-    print "Control Vars (sliced %s)" % type
-    print "==============================="
-    print "\t\t|YY\t|YN\t|NN\t|"
-    print "avg(count)\t|",
-    for y in ('YY', 'YN', 'NN'):
-        l = cvars[type+'ControlVars'][y[0]][y[1]]
-        print "%.2f\t|" % average(l),
-    print
-    print "stdev(count)\t|",
-    for y in ('YY', 'YN', 'NN'):
-        l = cvars[type+'ControlVars'][y[0]][y[1]]
-        print "%.2f\t|" % stdev(l),
-    print
-    for r in [(0, 1), (1, 2), (2, 3), (3, 10), (10, sys.maxint)]:
-        print "cnt [%d, %s)\t|" % (r[0], str(r[1]) if r[1] != sys.maxint else "inf"),
-        for y in ('YY', 'YN', 'NN'):
-            s = sum(1 if r[0] <= depth and depth < r[1] else 0 for depth in cvars[type+'ControlVars'][y[0]][y[1]])
-            print "%d\t|" % s,
-        print
-    print
-controlv('AllLoops')
-controlv('OuterLoop')
-
-print "Outer loop influenced by inner (inner remains in slice)"
-print "=============================="
-print "YY\t|YN\t|NN\t|"
-for y in ('YY', 'YN', 'NN'):
-    print "%d\t|" % results[y[0]][y[1]]['InfluencedByInner'],
-print
-print
-print "Percentage of these loops Loopus can bound: %.2f" % percent('InfluencedByInner')
-print
+printresult("Outer loop influenced by inner (inner remains in slice)", 'InfluencedByInner')
 
 print "Amortized Loops"
 print "==============="
@@ -226,3 +221,4 @@ printresult("Amortized A1 (inner loop counter incremented)", 'AmortA1', '-')
 printresult("Amortized A1 I_inner.VD = I_outer.VD", 'AmortA1InnerEqOuter', '-')
 printresult("Amortized A2 (inner loop counter never defined)", 'AmortA2', '-')
 printresult("Amortized A2 I_inner.VD = I_outer.VD", 'AmortA2InnerEqOuter', '-')
+printresult("Amortized B (inner bound is increment-delta of outer)", 'AmortB', '-')
