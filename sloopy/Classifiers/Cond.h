@@ -1,3 +1,5 @@
+#pragma once
+
 class ConditionClassifier : public LoopClassifier {
   public:
   virtual void run(const MatchFinder::MatchResult &Result) {

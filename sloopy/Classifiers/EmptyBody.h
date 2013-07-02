@@ -1,3 +1,5 @@
+#pragma once
+
 class EmptyBodyClassifier : public LoopClassifier {
   public:
     void run(const MatchFinder::MatchResult &Result) {

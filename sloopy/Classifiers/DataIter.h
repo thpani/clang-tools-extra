@@ -1,3 +1,5 @@
+#pragma once
+
 class DataIterClassifier : public IncrementClassifier {
   protected:
     IncrementInfo getIncrementInfo(const Expr *Expr) const throw (checkerror) {

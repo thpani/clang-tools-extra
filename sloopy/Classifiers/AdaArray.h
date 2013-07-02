@@ -1,5 +1,5 @@
-#ifndef LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_CLASSIFIERS_ADAARRAY_
-#define LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_CLASSIFIERS_ADAARRAY_
+#pragma once
+
 #include "IncrementClassifier.h"
 
 class AdaArrayForLoopClassifier : public IncrementClassifier {
@@ -121,5 +121,3 @@ class AdaArrayForLoopClassifier : public IncrementClassifier {
     AdaArrayForLoopClassifier(const ASTContext* Context) : IncrementClassifier("AArrayIter"), Context(Context) {}
 
 };
-
-#endif

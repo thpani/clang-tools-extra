@@ -1,3 +1,5 @@
+#pragma once
+
 #include "clang/AST/StmtVisitor.h"
 
 using namespace clang;

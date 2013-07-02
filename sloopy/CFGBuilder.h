@@ -1,5 +1,4 @@
-#ifndef LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_CFG_BUILDER_H_
-#define LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_CFG_BUILDER_H_
+#pragma once
 
 #include <sys/types.h> /* pid_t */
 #include <unistd.h>  /* _exit, fork */
@@ -661,5 +660,3 @@ class FunctionCallback : public MatchFinder::MatchCallback {
       }
     }
 };
-
-#endif // LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_CFG_BUILDER_H_

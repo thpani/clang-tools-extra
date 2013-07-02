@@ -1,5 +1,4 @@
-#ifndef LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_H_
-#define LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_H_
+#pragma once
 
 #include "llvm/Support/Format.h"
 #include "llvm/Support/GraphWriter.h"
@@ -1119,5 +1118,3 @@ struct DOTGraphTraits<const sloopy::NaturalLoop*> : public DefaultDOTGraphTraits
 };
 
 } // end llvm namespace
-
-#endif // LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_H_

@@ -1,4 +1,5 @@
 #pragma once
+
 #include "IncrementClassifier.h"
 
 class BranchingClassifier : public LoopClassifier {
