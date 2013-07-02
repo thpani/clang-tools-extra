@@ -1,17 +1,15 @@
-#ifndef _INCREMENT_CLASSIFIER_H_
-#define _INCREMENT_CLASSIFIER_H_
+#pragma once
 
 #include "LoopClassifier.h"
 
-
-struct ValueDeclIntPair {
-  const ValueDecl *Var;
+struct VarDeclIntPair {
+  const VarDecl *Var;
   llvm::APInt Int;
-  bool operator==(const ValueDeclIntPair &Other) const {
+  bool operator==(const VarDeclIntPair &Other) const {
     if (Var || Other.Var) return Var == Other.Var;
     return Int.getBitWidth() > 1 && Other.Int.getBitWidth() > 1 && llvm::APInt::isSameValue(Int, Other.Int);
   }
-  bool operator<(const ValueDeclIntPair &Other) const {
+  bool operator<(const VarDeclIntPair &Other) const {
     if (Var || Other.Var) {
       return Var < Other.Var;
     }
@@ -22,7 +20,7 @@ struct ValueDeclIntPair {
 struct IncrementInfo {
   const VarDecl *VD;
   const Stmt *Statement;
-  const ValueDeclIntPair Delta;
+  const VarDeclIntPair Delta;
 
   bool operator<(const IncrementInfo &Other) const {
     return VD < Other.VD || Delta < Other.Delta;
@@ -30,15 +28,15 @@ struct IncrementInfo {
 };
 typedef struct {
   const std::string Name;
-  const ValueDecl *Var;
+  const VarDecl *Var;
   const Stmt *IncrementOp;
 } PseudoConstantInfo;
 
 struct IncrementLoopInfo {
   const VarDecl *VD;
   const Stmt *Statement;
-  const ValueDeclIntPair Delta;
-  const ValueDeclIntPair Bound;
+  const VarDeclIntPair Delta;
+  const VarDeclIntPair Bound;
 };
 
 static IncrementInfo getIncrementInfo(const Expr *Expr, const std::string Marker, const ASTContext *Context, const TypePredicate TypePredicate) throw(checkerror) {
@@ -99,7 +97,7 @@ static IncrementInfo getIncrementInfo(const Expr *Expr, const std::string Marker
   throw checkerror(Fail, Marker, "Inc_NotValid");
 }
 
-static std::pair<std::string, ValueDeclIntPair> checkIncrementCond(
+static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
     const Expr *Cond,
     const IncrementInfo Increment,
     const TypePredicate TypePredicate,
@@ -118,8 +116,8 @@ static std::pair<std::string, ValueDeclIntPair> checkIncrementCond(
     * or one is an integer literal
     */
   const Expr *CondInner = Cond->IgnoreParenCasts();
-  const ValueDecl *CondVar;
-  ValueDeclIntPair Bound;
+  const VarDecl *CondVar;
+  VarDeclIntPair Bound;
   if (const VarDecl *VD = getVariable(CondInner)) {
     if (!TypePredicate(VD)) {
       throw checkerror(Fail, Marker, "Cond_Var_WrongType");
@@ -147,7 +145,7 @@ static std::pair<std::string, ValueDeclIntPair> checkIncrementCond(
   else if (const BinaryOperator *ConditionOp = dyn_cast<BinaryOperator>(CondInner)) {
     BinaryOperatorKind Opc = ConditionOp->getOpcode();
     if ((Opc >= BO_Mul && Opc <= BO_Shr) || ConditionOp->isComparisonOp()) {
-      const ValueDecl *BoundVar;
+      const VarDecl *BoundVar;
 
 /*       if (!(ConditionOp->getLHS()->getType()->isIntegerType())) */
 /*         throw checkerror(Unknown, Marker, "Cond_LHS_NoInteger"); */
@@ -156,8 +154,8 @@ static std::pair<std::string, ValueDeclIntPair> checkIncrementCond(
 
       // see if LHS/RHS is integer var
       bool LoopVarLHS;
-      const ValueDecl *LHS = getTypeVariable(ConditionOp->getLHS(), TypePredicate);
-      const ValueDecl *RHS = getTypeVariable(ConditionOp->getRHS(), TypePredicate);
+      const VarDecl *LHS = getTypeVariable(ConditionOp->getLHS(), TypePredicate);
+      const VarDecl *RHS = getTypeVariable(ConditionOp->getRHS(), TypePredicate);
       // see if LHS/RHS is (integer var)++
       if (LHS == NULL) {
         try {
@@ -304,7 +302,7 @@ static std::pair<std::string, ValueDeclIntPair> checkIncrementCond(
   /* else { */
   /*   std::cout<<"$$$IRRED?!$$$"<<std::endl; */
   /* } */
-  return std::pair<std::string, ValueDeclIntPair>(Suffix, Bound);
+  return std::pair<std::string, VarDeclIntPair>(Suffix, Bound);
 }
 
 class IncrementClassifier : public LoopClassifier {
@@ -337,7 +335,7 @@ class IncrementClassifier : public LoopClassifier {
         const IncrementClassifier *Outer;
     };
 
-    void addPseudoConstantVar(const std::string Name, const ValueDecl *Var, const Stmt *IncrementOp=NULL) const {
+    void addPseudoConstantVar(const std::string Name, const VarDecl *Var, const Stmt *IncrementOp=NULL) const {
       const PseudoConstantInfo I = { Name, Var, IncrementOp };
       PseudoConstantSet.push_back(I);
     }
@@ -345,9 +343,9 @@ class IncrementClassifier : public LoopClassifier {
     void checkPseudoConstantSet(const NaturalLoop *L) const throw (checkerror) {
       for (auto Block : *L) {
         for (auto Stmt : *Block) {
-          cloopy::PseudoConstantAnalysis A(Stmt);
+          DefUseHelper A(Stmt);
           for (auto IncrementElement : PseudoConstantSet) {
-            if (!A.isPseudoConstant(IncrementElement.Var, IncrementElement.IncrementOp)) {
+            if (A.isDefExclDecl(IncrementElement.Var, IncrementElement.IncrementOp)) {
               throw checkerror(Fail, Marker, IncrementElement.Name+"_ASSIGNED");
             }
           }
@@ -359,7 +357,7 @@ class IncrementClassifier : public LoopClassifier {
     const std::string Marker;
 
     virtual IncrementInfo getIncrementInfo(const Expr *Expr) const throw (checkerror) = 0;
-    virtual std::pair<std::string, ValueDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo I) const throw (checkerror) = 0;
+    virtual std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo I) const throw (checkerror) = 0;
     virtual bool checkPreds(const NaturalLoop *Loop) const {
       unsigned PredSize = Loop->getExit().pred_size();
       assert(PredSize > 0);
@@ -398,7 +396,7 @@ class IncrementClassifier : public LoopClassifier {
             const Expr *Cond = (*PI)->getTerminatorCondition();
             auto result = checkCond(Cond, I);
             std::string suffix = result.first;
-            ValueDeclIntPair Bound = result.second;
+            VarDeclIntPair Bound = result.second;
 
             PseudoConstantSet.clear();
             DefUseHelper CondDUH(Cond);
@@ -440,4 +438,3 @@ class IncrementClassifier : public LoopClassifier {
       return std::vector<IncrementLoopInfo>();
     }
 };
-#endif // _INCREMENT_CLASSIFIER_H_

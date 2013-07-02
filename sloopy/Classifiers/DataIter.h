@@ -28,9 +28,9 @@ class DataIterClassifier : public IncrementClassifier {
       return { IncVar, BO, { NULL, llvm::APInt() } };
     }
 
-    std::pair<std::string, ValueDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
+    std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
       // TODO
-      return std::pair<std::string, ValueDeclIntPair>(std::string(), { NULL, llvm::APInt() });
+      return std::pair<std::string, VarDeclIntPair>(std::string(), { NULL, llvm::APInt() });
     }
 
   public:

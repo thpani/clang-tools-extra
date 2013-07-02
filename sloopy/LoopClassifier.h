@@ -4,8 +4,8 @@
 #include <algorithm>
 #include <vector>
 #include <stack>
+
 #include "clang/AST/ASTContext.h"
-#include "PseudoConstantAnalysis.h"
 
 using namespace clang;
 using namespace clang::tooling;
@@ -36,11 +36,11 @@ class checkerror {
     const std::string reason;
 };
 
-typedef bool (*TypePredicate)(const ValueDecl *);
-static bool isIntegerType(const ValueDecl *VD) {
+typedef bool (*TypePredicate)(const VarDecl *);
+static bool isIntegerType(const VarDecl *VD) {
   return VD->getType()->isIntegerType();
 }
-static bool isPointerType(const ValueDecl *VD) {
+static bool isPointerType(const VarDecl *VD) {
   return VD->getType()->isPointerType();
 }
 static bool isIntegerConstant(const Expr *Expression, const ASTContext *Context) {
@@ -99,7 +99,7 @@ static bool isIntegerVariable(const Expr *Expression) {
   return getIntegerVariable(Expression) != NULL;
 }
 
-/* static const ValueDecl *getField(const Expr *Expression) { */
+/* static const VarDecl *getField(const Expr *Expression) { */
 /*   if (Expression==NULL) return NULL; */
 /*   if (const ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(Expression->IgnoreParenCasts())) { */
 /*     const Expr *Base = ASE->getBase()->IgnoreParenCasts(); */

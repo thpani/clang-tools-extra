@@ -11,7 +11,7 @@ class AdaArrayForLoopClassifier : public IncrementClassifier {
       return ::getIncrementInfo(Expr, Marker, Context, &isIntegerType);
     }
 
-    std::pair<std::string, ValueDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
+    std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
       std::string Suffix;
 
       /* COND */
@@ -20,7 +20,7 @@ class AdaArrayForLoopClassifier : public IncrementClassifier {
       }
 
       const Expr *CondInner = Cond->IgnoreParenCasts();
-      ValueDeclIntPair Bound;
+      VarDeclIntPair Bound;
       if (const ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(CondInner)) {
         auto A = getArrayVariables(ASE);
         if (A.second != Increment.VD) {
@@ -31,7 +31,7 @@ class AdaArrayForLoopClassifier : public IncrementClassifier {
       else if (const BinaryOperator *ConditionOp = dyn_cast<BinaryOperator>(CondInner)) {
         BinaryOperatorKind Opc = ConditionOp->getOpcode();
         if ((Opc >= BO_Mul && Opc <= BO_Shr) || ConditionOp->isComparisonOp()) {
-          const ValueDecl *BoundVar;
+          const VarDecl *BoundVar;
 
           // see if LHS/RHS is array var
           bool LoopVarLHS;
@@ -114,7 +114,7 @@ class AdaArrayForLoopClassifier : public IncrementClassifier {
         throw checkerror(Unknown, Marker, "Cond_OpNotSupported");
       }
 
-      return std::pair<std::string, ValueDeclIntPair>(Suffix, Bound);
+      return std::pair<std::string, VarDeclIntPair>(Suffix, Bound);
     }
 
   public:

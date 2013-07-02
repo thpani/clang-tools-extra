@@ -10,7 +10,7 @@ class BaseIntegerIterClassifier : public IncrementClassifier {
       return ::getIncrementInfo(Expr, Marker, Context, &isIntegerType);
     }
 
-    std::pair<std::string, ValueDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
+    std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
       return checkIncrementCond(Cond, Increment, &isIntegerType, Context, Marker);
     }
 

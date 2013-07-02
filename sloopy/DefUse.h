@@ -42,6 +42,17 @@ class DefUseHelper : public ConstStmtVisitor<DefUseHelper> {
       }
       return false;
     }
+    bool isDefExclDecl(const VarDecl *VD, const class Stmt *Stmt) {
+      auto I = DefStmts.find(VD);
+      if (I != DefStmts.end()) {
+        for (const class Stmt *S : I->second) {
+          if (!isa<DeclStmt>(S) || Stmt != S) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
     bool isUse(const VarDecl *VD) {
       RunAnalysis();
       return std::find(Uses.begin(), Uses.end(), VD) != Uses.end();

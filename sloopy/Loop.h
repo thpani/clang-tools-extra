@@ -6,8 +6,6 @@
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/StmtVisitor.h"
 
-#include "PseudoConstantAnalysis.h"
-
 using namespace clang;
 
 namespace sloopy {
