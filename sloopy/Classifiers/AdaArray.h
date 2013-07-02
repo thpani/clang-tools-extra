@@ -93,10 +93,12 @@ class AdaArrayForLoopClassifier : public IncrementClassifier {
           else if (LHSBase != NULL && LHSIdx == Increment.VD) {
             LoopVarLHS = true;
             Suffix = "ComplexBound";
+            Bound = { NULL, llvm::APInt() };
           }
           else if (RHSBase != NULL && RHSIdx == Increment.VD) {
             LoopVarLHS = false;
             Suffix = "ComplexBound";
+            Bound = { NULL, llvm::APInt() };
           }
           else {
             throw checkerror(Fail, Marker, "Cond_BinOp_TooComplex");

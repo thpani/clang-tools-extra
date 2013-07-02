@@ -20,6 +20,7 @@
 #include "Classifiers/Branch.h"
 #include "Classifiers/DataIter.h"
 #include "Classifiers/ArrayIter.h"
+#include "Classifiers/Influence.h"
 /* #include "Classifiers/EmptyBody.h" */
 /* #include "Classifiers/Cond.h" */
 
@@ -350,11 +351,11 @@ static SlicingCriterion slicingCriterionAllLoops(const MergedLoopDescriptor &Loo
 
 void classify(
     const bool isSpecified,
-    const MergedLoopDescriptor &D,
     const NaturalLoop *SlicedAllLoops,
     const NaturalLoop *SlicedOuterLoop,
     const NaturalLoop *OutermostNestingLoop,
     const std::vector<const NaturalLoop*> NestingLoops,
+    const std::vector<const NaturalLoop*> ProperlyNestedLoops,
     const ASTContext *Context) {
   // Any
   AnyLoopCounter ALC;
@@ -382,17 +383,20 @@ void classify(
   AdaArrayForLoopClassifier AA(Context);
   auto I = AA.classify(SlicedOuterLoop);
   if (!I.size()) {
-    AdaForLoopClassifier A(Context);
+    IntegerIterClassifier A(Context);
     auto Increments = A.classify(SlicedOuterLoop);
   }
   ArrayIterClassifier Ar(Context);
   Ar.classify(SlicedOuterLoop);
 
   // Test
-  MultiExitAdaIncrSetSizeClassifier MEAISSC;
+  MultiExitIntegerIterIncrSetSizeClassifier MEAISSC;
   MEAISSC.classify(Context, SlicedAllLoops);
+  MultiExitArrayIterIncrSetSizeClassifier MEAIISSC;
+  MEAIISSC.classify(Context, SlicedAllLoops);
 
-  MultiExitAdaClassifier MEAC(Context);
+#if 0
+  MultiExitIntegerIterClassifier MEAC(Context);
   auto IMEAC = MEAC.classify(SlicedAllLoops);
   if (isSpecified && DumpIncrementVars) {
     for (auto I : IMEAC) {
@@ -413,10 +417,32 @@ void classify(
       llvm::errs() << ")\n";
     }
   }
+  MultiExitArrayIterClassifier MEAIC(Context);
+  IMEAC = MEAIC.classify(SlicedAllLoops);
+  if (isSpecified && DumpIncrementVars) {
+    for (auto I : IMEAC) {
+      llvm::errs() << "(incr: " << I.VD->getNameAsString() << ", ";
+      llvm::errs() << "bound: ";
+      if (I.Bound.Var) {
+        llvm::errs() << I.Bound.Var->getNameAsString();
+      } else {
+        llvm::errs() << I.Bound.Int.getSExtValue();
+      }
+      llvm::errs() << ", ";
+      llvm::errs() << "delta: ";
+      if (I.Delta.Var) {
+        llvm::errs() << I.Delta.Var->getNameAsString();
+      } else {
+        llvm::errs() << I.Delta.Int.getSExtValue();
+      }
+      llvm::errs() << ")\n";
+    }
+  }
+#endif
 
   // Influence
   InnerInfluencesOuterClassifier IIOC;
-  IIOC.classify(D, SlicedOuterLoop);
+  IIOC.classify(ProperlyNestedLoops, SlicedOuterLoop);
 
   AmortizedTypeA2Classifier ATA2C;
   ATA2C.classify(Context, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
@@ -612,7 +638,14 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         }
         const NaturalLoop *OutermostNestingLoop = M[**I][1];
 
-        classify(isSpecified(D, PL), MLD, SlicedAllLoops, SlicedOuterLoop, OutermostNestingLoop, NestingLoops, Result.Context);
+        std::vector<const NaturalLoop*> ProperlyNestedLoops;
+        for (auto I = MLD.ProperlyNestedLoops.begin(),
+                  E = MLD.ProperlyNestedLoops.end();
+                  I != E; I++) {
+          ProperlyNestedLoops.push_back(M[**I][1]);
+        }
+
+        classify(isSpecified(D, PL), SlicedAllLoops, SlicedOuterLoop, OutermostNestingLoop, NestingLoops, ProperlyNestedLoops, Result.Context);
 
         if (isSpecified(D, PL)) {
           if (DumpClasses) {

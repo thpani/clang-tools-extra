@@ -1,8 +1,10 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import os.path
 import sys
 from collections import defaultdict
+from datetime import datetime
 
 if sys.argv[1] == 'cBench':
     SLOOPY_ABS_START = '/Users/thomas/Documents/uni/da/llvm-build/bench/cBench15032013/'
@@ -36,7 +38,7 @@ for line in sf:
 results = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
 branch = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
-UNCLASS = 'unclas'
+UNCLASS = 'nonsimple'
 SIMPLE = 'simple'
 SIMPLE_DETAILS = ('IntegerIter', 'DataIter', 'AArrayIter', 'PArrayIter')
 
@@ -77,7 +79,7 @@ for line in lf:
                         continue
                     branch[c.split('@')[1]+'depth'][term][bound].append(depth)
                     branch[c.split('@')[1]+'nodes'][term][bound].append(nodes)
-                elif 'ControlVars' in cls or 'MultiExitIntegerIterIncrSetSize' in cls:
+                elif 'ControlVars' in cls or 'IncrSetSize' in cls:
                     # ControlVars-3
                     c, num = cls.split('-')
                     num = int(num)
@@ -85,7 +87,7 @@ for line in lf:
                         continue
                     branch[c.split('@')[1]][term][bound].append(num)
                 elif '@' in cls:
-                    results[term][bound][cls.split('@')[1]] += 1
+                    results[term][bound][cls.split('@')[1].split('-')[0]] += 1
             results[term][bound][simplify(sc)] += 1
             ok = True
             break
@@ -96,12 +98,20 @@ print "==================================="
 print sys.argv[1]
 print "==================================="
 print
+print "generated", datetime.now()
+print
+
+def countif(type, r, y):
+    return sum([1 if r[0] <= depth and depth < r[1] else 0 for depth in branch[type][y[0]][y[1]]])
+
+def countall(type, r):
+    return sum([countif(type, r, y) for y in ('YY', 'YN', 'NN')])
 
 def sumall(c):
     return sum([ results[y[0]][y[1]][c] for y in ('YY', 'YN', 'NN') ])
 
 def percent(c):
-    return 1. * results['Y']['Y'][c] / sumall(c)
+    return 100. * results['Y']['Y'][c] / sumall(c)
 
 def average(s):
     return sum(s) * 1.0 / len(s)
@@ -113,112 +123,108 @@ def stdev(s):
     standard_deviation = math.sqrt(average(variance))
     return standard_deviation
 
-def printresult(desc, key, underline='='):
+def printh(desc, expl=None):
+    print
     print desc
-    print underline * len(desc)
-    print "YY\t|YN\t|NN\t|"
-    for y in ('YY', 'YN', 'NN'):
-        print "%d\t|" % results[y[0]][y[1]][key],
+    print "=" * len(desc)
     print
-    print
-    print "Percentage of these loops Loopus can bound: %.2f" % percent(key)
+    if expl:
+        print expl
+
+def printresult(desc, key, crosssum=True):
+    print desc
+    print '-' * len(desc)
+
+    if not hasattr(key, '__iter__'):
+        key = (key,)
+
+    longest_key = max([len(x) for x in key])
+
+    print ''.ljust(longest_key), "\t| YY\t| YN\t| NN\t║ LP\t| Σ"
+    for x in key:
+        print x.ljust(longest_key), "\t|",
+        for y in ('YY', 'YN', 'NN'):
+            print "%2d\t%s" % (results[y[0]][y[1]][x], '║' if y == 'NN' else '|'),
+        print "%.1f\t|" % percent(x),
+        if crosssum or x == key[0]:
+            print sumall(x)
+        else:
+            print sumall(x), "/", sumall(key[0]), "(= %.1f%%)" % (100.*sumall(x)/sumall(key[0]))
+    if crosssum:
+        if len(key) > 1:
+            print ''.ljust(longest_key), "\t\t\t\t\t ", sum([sumall(x) for x in key]), "(TOTAL)"
     print
 
-def distribution(type):
-    print type
-    print "==========================================="
-    print "\t\t|YY\t|YN\t|NN\t|"
-    print "avg(count)\t|",
-    for y in ('YY', 'YN', 'NN'):
-        l = branch[type][y[0]][y[1]]
-        print "%.2f\t|" % average(l),
-    print
-    print "stdev(count)\t|",
-    for y in ('YY', 'YN', 'NN'):
-        l = branch[type][y[0]][y[1]]
-        print "%.2f\t|" % stdev(l),
-    print
-    for r in [(0, 1), (1, 2), (2, 3), (3, 10), (10, sys.maxint)]:
-        print "cnt [%d, %s)\t|" % (r[0], str(r[1]) if r[1] != sys.maxint else "inf"),
-        for y in ('YY', 'YN', 'NN'):
-            s = sum(1 if r[0] <= depth and depth < r[1] else 0 for depth in branch[type][y[0]][y[1]])
-            print "%d\t|" % s,
-        print
-    print
+CLASS_LIST = [(0, 1), (1, 2), (2, 3), (3, 10), (10, sys.maxint)]
 
-def printb(type):
-    print "Branching (sliced %s)" % type
-    print "============================"
-    for x in ('depth', 'nodes'):
-        print "\t\t|YY\t|YN\t|NN\t|"
-        print "avg(%s)\t|" % x,
+def distribution(desc, type, subtype=('',)):
+    print desc
+    print "-" * len (desc)
+    for x in subtype:
+        print "\t\t| YY\t| YN\t| NN\t║ LP\t| Σ"
+        print "avg(%s)\t|" % (x if x else 'count'),
         for y in ('YY', 'YN', 'NN'):
-            l = branch[type+'Branch'+x][y[0]][y[1]]
-            print "%.2f\t|" % average(l),
+            l = branch[type+x][y[0]][y[1]]
+            print "%.2f\t%s" % (average(l), '║' if y == 'NN' else '|'),
         print
-        print "stdev(%s)\t|" % x,
+        print "stdev(%s)\t|" % (x if x else 'count'),
         for y in ('YY', 'YN', 'NN'):
-            l = branch[type+'Branch'+x][y[0]][y[1]]
-            print "%.2f\t|" % stdev(l),
+            l = branch[type+x][y[0]][y[1]]
+            print "%.2f\t%s" % (stdev(l), '║' if y == 'NN' else '|'),
         print
-        for r in [(0, 1), (1, 2), (2, 3), (3, 10), (10, sys.maxint)]:
-            print x+" [%d, %s)\t|" % (r[0], str(r[1]) if r[1] != sys.maxint else "inf"),
+        for r in CLASS_LIST:
+            if (r[1] - r[0]) == 1:
+                print "%s = %d \t|" % (x if x else 'cnt', r[0]),
+            else:
+                print "%s [%d, %s)\t|" % (x if x else 'cnt', r[0], str(r[1]) if r[1] != sys.maxint else "inf"),
             for y in ('YY', 'YN', 'NN'):
-                s = sum(1 if r[0] <= depth and depth < r[1] else 0 for depth in branch[type+'Branch'+x][y[0]][y[1]])
-                print "%d\t|" % s,
-            print
-    print
+                s = countif(type+x, r, y)
+                print "%d\t%s" % (s, '║' if y == 'NN' else '|'),
+            print "%.1f\t|" % (100.*countif(type+x, r, 'YY')/countall(type+x, r)),
+            print countall(type+x, r)
+        print "\t\t\t\t\t\t ", sum([countall(type+x, r) for r in CLASS_LIST]), "(TOTAL)"
+        print
 
-printresult("Simple Control Flow (EXIT block has 1 pred)", 'SimpleCF')
 
-print "Class distribution (SIMPLE overview)"
-print "===================================="
-print "\t|YY\t|YN\t|NN\t|"
-for x in (UNCLASS, SIMPLE):
-    print x, "\t|",
-    for y in ('YY', 'YN', 'NN'):
-        print results[y[0]][y[1]][x], "\t|",
-    print
-print "u/(s+1)\t|",
-for y in ('YY', 'YN', 'NN'):
-    print "%.2f\t|" % (results[y[0]][y[1]][UNCLASS] / (results[y[0]][y[1]][SIMPLE]+1.)),
-print
-print
+printh("(Single Exit) Simple Loops", "Single exit that takes the simple form.\n")
 
-print "Percentage of simple loops Loopus can bound: %.2f" % percent(SIMPLE)
-print "Percentage of unclassified loops Loopus can bound: %.2f" % percent(UNCLASS)
-print
+printresult("Single Exit vs. Multi Exit", ('SingleExit', 'MultiExit'))
+printresult("Simple Loops ⊆ Single Exit", ('SingleExit', SIMPLE), crosssum=False)
+printresult("Simple Loop vs. Non-Simple (= non-simple single exit, or multi exit) (overview)", (UNCLASS, SIMPLE))
+printresult("Simple Loop vs. Non-Simple (= non-simple single exit, or multi exit) (class details)", (UNCLASS,) + SIMPLE_DETAILS)
+print "LP ... Loopus Performance, % of loops in the resp. class for which Loopus computes a bound.\n"
 
-print "Class distribution (SIMPLE details)"
-print "==================================="
-print "\t\t|YY\t|YN\t|NN\t|"
-for x in (UNCLASS,) + SIMPLE_DETAILS:
-    print "%-8s\t|" % x,
-    for y in ('YY', 'YN', 'NN'):
-        print results[y[0]][y[1]][x], "\t|",
-    print
-print
 
-printresult("Multi-exit IntegerIter", 'MultiExitIntegerIter')
-distribution('MultiExitIntegerIterIncrSetSize')
-printb('AllLoops')
-printb('OuterLoop')
+printh("(Multi Exit) Simple Loops", "Multiple exits, where ALL take the simple form.\n")
 
-distribution('AllLoopsControlVars')
-distribution('OuterLoopControlVars')
+print "Still TODO...\n"
+
+
+printh("Semi-simple Loops", "Multiple exits, where SOME take the simple form.\n")
+
+printresult("Multi-exit Loops", ('MultiExitIntegerIter', 'MultiExitPArrayIter'))
+print "MultiExitAArrayIter, MultiExitDataIter are still TODO...\n"
+distribution("MultiExitIntegerIter Increment Variables", 'MultiExitIntegerIterIncrSetSize')
+distribution("MultiExitPArrayIter Increment Variables", 'MultiExitPArrayIterIncrSetSize')
+
+
+printh("Influencing/-ed loops")
 
 printresult("Outer loop influenced by inner (inner remains in slice)", 'InfluencedByInner')
+printresult("Inner loop influences outer (inner remains in slice)", 'InfluencesOuter')
 
-print "Amortized Loops"
-print "==============="
-print
-print "Inner loop is IntegerIter loop w/ the exception that"
-print "  - it may have >1 arcs leaving the loop, and"
-print "  - of the resp. conditions >= 1 takes the IntegerIter form."
-print
 
-printresult("Amortized A1 (inner loop counter incremented)", 'AmortA1', '-')
-printresult("Amortized A1 I_inner.VD = I_outer.VD", 'AmortA1InnerEqOuter', '-')
-printresult("Amortized A2 (inner loop counter never defined)", 'AmortA2', '-')
-printresult("Amortized A2 I_inner.VD = I_outer.VD", 'AmortA2InnerEqOuter', '-')
-printresult("Amortized B (inner bound is increment-delta of outer)", 'AmortB', '-')
+printh("Amortized Loops (for multi-exit IntegerIter loops ONLY)")
+
+printresult("Amortized A1 (inner loop counter incremented)", ('AmortA1', 'AmortA1InnerEqOuter'), crosssum=False)
+printresult("Amortized A2 (inner loop counter never defined)", ('AmortA2', 'AmortA2InnerEqOuter'), crosssum=False)
+printresult("Amortized B (inner bound is increment-delta of outer)", 'AmortB')
+
+
+printh("Control Flow")
+
+distribution("Branching (all loop slice)", 'AllLoopsBranch', ('depth', 'nodes'))
+distribution("Branching (outer loop slice)", 'OuterLoopBranch', ('depth', 'nodes'))
+
+distribution("Control Variables (all loop slice)", 'AllLoopsControlVars')
+distribution("Control Variables (outer loop slice)", 'OuterLoopControlVars')

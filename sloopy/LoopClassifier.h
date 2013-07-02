@@ -1,5 +1,4 @@
-#ifndef LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_CLASSIFIER_H_
-#define LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_CLASSIFIER_H_
+#pragma once
 
 #include <sstream>
 #include <algorithm>
@@ -37,11 +36,11 @@ class checkerror {
     const std::string reason;
 };
 
-typedef bool (*TypePredicate)(const VarDecl *);
-static bool isIntegerType(const VarDecl *VD) {
+typedef bool (*TypePredicate)(const ValueDecl *);
+static bool isIntegerType(const ValueDecl *VD) {
   return VD->getType()->isIntegerType();
 }
-static bool isPointerType(const VarDecl *VD) {
+static bool isPointerType(const ValueDecl *VD) {
   return VD->getType()->isPointerType();
 }
 static bool isIntegerConstant(const Expr *Expression, const ASTContext *Context) {
@@ -100,48 +99,49 @@ static bool isIntegerVariable(const Expr *Expression) {
   return getIntegerVariable(Expression) != NULL;
 }
 
-static const ValueDecl *getIntegerField(const Expr *Expression) {
-  if (Expression==NULL) return NULL;
-  if (const ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(Expression->IgnoreParenCasts())) {
-    const Expr *Base = ASE->getBase()->IgnoreParenCasts();
-    if (const VarDecl *VD = getVariable(Base)) {
-      if (VD->getType()->isArrayType()) {
-          if (VD->getType()->castAsArrayTypeUnsafe()->getElementType()->isIntegerType()) {
-            return VD;
-          }
-      }
-      else {
-        // TODO
-        assert(VD->getType()->isPointerType());
-      }
-    }
-    if (const MemberExpr *ME = dyn_cast<MemberExpr>(Base->IgnoreParenCasts())) {
-      if (const FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl())) {
-        if (FD->getType()->isArrayType()) {
-          if (FD->getType()->castAsArrayTypeUnsafe()->getElementType()->isIntegerType()) {
-            return FD;
-          }
-        }
-        else {
-          // TODO
-          assert(FD->getType()->isPointerType());
-        }
-      }
-    }
-  }
-  if (const VarDecl *VD = getIntegerVariable(Expression)) {
-    return VD;
-  }
-  if (const MemberExpr *ME = dyn_cast<MemberExpr>(Expression->IgnoreParenCasts())) {
-    // TODO
-    if (const FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl())) {
-      if (FD->getType()->isIntegerType()) {
-        return FD;
-      }
-    }
-  }
-  return NULL;
-}
+/* static const ValueDecl *getField(const Expr *Expression) { */
+/*   if (Expression==NULL) return NULL; */
+/*   if (const ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(Expression->IgnoreParenCasts())) { */
+/*     const Expr *Base = ASE->getBase()->IgnoreParenCasts(); */
+/*     if (const VarDecl *VD = getVariable(Base)) { */
+/*       if (VD->getType()->isArrayType()) { */
+/*           if (VD->getType()->castAsArrayTypeUnsafe()->getElementType()->isIntegerType()) { */
+/*             return VD; */
+/*           } */
+/*       } */
+/*       else { */
+/*         // TODO */
+/*         assert(VD->getType()->isPointerType()); */
+/*       } */
+/*     } */
+/*     if (const MemberExpr *ME = dyn_cast<MemberExpr>(Base->IgnoreParenCasts())) { */
+/*       if (const FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl())) { */
+/*         if (FD->getType()->isArrayType()) { */
+/*           /1* if (FD->getType()->castAsArrayTypeUnsafe()->getElementType()->isIntegerType()) { *1/ */
+/*             return FD; */
+/*           /1* } *1/ */
+/*         } */
+/*         else { */
+/*           // TODO */
+/*           assert(FD->getType()->isPointerType()); */
+/*         } */
+/*       } */
+/*     } */
+/*   } */
+/*   /1* if (const VarDecl *VD = getIntegerVariable(Expression)) { *1/ */
+/*   if (const VarDecl *VD = getVariable(Expression)) { */
+/*     return VD; */
+/*   } */
+/*   if (const MemberExpr *ME = dyn_cast<MemberExpr>(Expression->IgnoreParenCasts())) { */
+/*     // TODO */
+/*     if (const FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl())) { */
+/*       /1* if (FD->getType()->isIntegerType()) { *1/ */
+/*         return FD; */
+/*       /1* } *1/ */
+/*     } */
+/*   } */
+/*   return NULL; */
+/* } */
 
 // Classifier := Stmt [!?@] {ADA,Array,...} - Suffix
 // Suffix := Str | Str _ Suffix
@@ -172,9 +172,9 @@ class SimpleLoopCounter : public LoopClassifier {
     void classify(const NaturalLoop* Loop) const {
       unsigned PredSize = Loop->getExit().pred_size();
       if (PredSize == 1) {
-        LoopClassifier::classify(Loop, "SimpleCF");
+        LoopClassifier::classify(Loop, "SingleExit");
+      } else if (PredSize > 1) {
+        LoopClassifier::classify(Loop, "MultiExit");
       }
     }
 };
-
-#endif // LLVM_TOOLS_CLANG_TOOLS_EXTRA_LOOP_CLASSIFY_LOOP_CLASSIFIER_H_
