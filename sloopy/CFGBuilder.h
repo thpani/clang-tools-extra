@@ -393,7 +393,7 @@ void classify(
   {
     MultiExitIncrSetSizeClassifier C(Context);
     auto IMEAC = C.classify(SlicedAllLoops);
-    if (IMEAC.size() > 7 || isSpecified && DumpIncrementVars) {
+    if (isSpecified && DumpIncrementVars) {
       for (auto I : IMEAC) {
         llvm::errs() << "(incr: " << I.VD->getNameAsString() << ", ";
         llvm::errs() << "bound: ";
@@ -411,7 +411,6 @@ void classify(
         }
         llvm::errs() << ")\n";
       }
-      llvm::errs() << "----------\n";
     }
   }
 #if 0 // called by MultiExitIncrSetSizeClassifier
