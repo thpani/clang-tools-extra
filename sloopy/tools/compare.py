@@ -57,14 +57,18 @@ def parse_sloopy():
     for line in sf:
         filepath, _, func, _, line, _, linesbe, classes = line.split(' ', 7)
         line = int(line)
-        linesbe = [ int(linebe) for linebe in linesbe.split(',')[:-1] ]
+        linesbe = list(set([ int(linebe) for linebe in linesbe.split(',')[:-1] ]))
         assert(line > 0)
         assert(not 0 in linesbe)
 
         filepath = './'+os.path.relpath(filepath, SLOOPY_ABS_START)
         classes = classes.split()
 
-        sloopy_classifications[filepath][func][line] = (classes, linesbe)
+        if sloopy_classifications[filepath][func].has_key(line):
+            # print >> sys.stderr, "!c", filepath, func, line
+            del sloopy_classifications[filepath][func][line]
+        else:
+            sloopy_classifications[filepath][func][line] = (classes, linesbe)
         for linebe in linesbe:
             sloopy_classificationsb[filepath][func][linebe] = (classes, line)
 
@@ -88,10 +92,88 @@ def classify(sc, term, bound):
                 results[term][bound]['SingleExitNonSimple'] += 1
     results[term][bound][simplify(sc)] += 1
 
-HEADER_RANGE = 10
-BACKEDGE_RANGE = 10
+HEADER_RANGE = 1
+BACKEDGE_RANGE = 8
+
+INLINING_MATCHER = {
+        ('./security_pgp_d/src/fileio.c', 'ck_dup_output', 1938, 2809) :
+        ('./security_pgp_d/src/fileio.c', 'ck_dup_output', 2762, 2809),
+
+        ('./office_ghostscript/src/zchar1.c', 'bbox_finish', 3056, 3260) :
+        ('./office_ghostscript/src/zchar1.c', 'bbox_finish', 3244, 3260),
+
+        ('./office_ghostscript/src/zchar1.c', 'type1addpath_continue', 3059, 3299) :
+        ('./office_ghostscript/src/zchar1.c', 'type1addpath_continue', 3272, 3299),
+
+        ('./office_ghostscript/src/gp_unifs.c', 'gp_enumerate_files_close', 1215, 1460) :
+        ('./office_ghostscript/src/gp_unifs.c', 'gp_enumerate_files_close', 1458, 1460),
+
+        ('./office_ghostscript/src/gdevmem.c', 'gdev_mem_max_height', 1945, 1995):
+        ('./office_ghostscript/src/gdevmem.c', 'gdev_mem_max_height', 1994, 1995),
+
+        ('./network_dijkstra/src/dijkstra_large.c', 'dijkstra', 940, 976):
+        ('./network_dijkstra/src/dijkstra_large.c', 'dijkstra', 960, 976),
+
+        ('./consumer_mad/src/latin1.c', 'id3_latin1_decode', 819, 836):
+        ('./consumer_mad/src/latin1.c', 'id3_latin1_decode', 835, 836),
+
+        ('./consumer_lame/src/mainmpglib.c', 'lame_decode_initfile', 2244, 2266):
+        ('./consumer_lame/src/mainmpglib.c', 'lame_decode_initfile', 2261, 2266),
+
+        ('./consumer_jpeg_c/src/rdgif.c', 'start_input_gif', 1670, 0):
+        ('./consumer_jpeg_c/src/rdgif.c', 'start_input_gif', 1923, 1964),
+
+        ('./bzip2d/src/bzip2.c', 'compressStream', 3049, 3088):
+        ('./bzip2d/src/bzip2.c', 'compressStream', 3077, 3088),
+
+        ('./bzip2d/src/bzip2.c', 'uncompressStream', 3049, 3257):
+        ('./bzip2d/src/bzip2.c', 'uncompressStream', 3246, 3257),
+
+        #11
+
+        # BE inlined
+
+        ('./office_ghostscript/src/stream.c', 'spputc', 1396, 1562):
+        ('./office_ghostscript/src/stream.c', 'spputc', 1396, 1404),
+
+        ('./office_ghostscript/src/stream.c', 'spgetcc', 1371, 1551):
+        ('./office_ghostscript/src/stream.c', 'spgetcc', 1371, 1374),
+
+        ('./office_ghostscript/src/stream.c', 's_std_read_flush', 1227, 1551):
+        ('./office_ghostscript/src/stream.c', 's_std_read_flush', 1227, 1231),
+
+        ('./office_ghostscript/src/isave.c', 'combine_space', 2088, 2094):
+        ('./office_ghostscript/src/isave.c', 'combine_space', 2088, 2108),
+
+        #4
+
+        # linebreak fix
+        ('./office_ghostscript/src/gximage2.c', 'image_render_mono', 3422, 3619):
+        ('./office_ghostscript/src/gximage2.c', 'image_render_mono', 3422, 3629),
+
+        ('./office_ghostscript/src/gximage2.c', 'image_render_mono', 3199, 3270):
+        ('./office_ghostscript/src/gximage2.c', 'image_render_mono', 3199, 3280),
+
+        ('./office_ghostscript/src/gximage2.c', 'image_render_mono', 3110, 3182):
+        ('./office_ghostscript/src/gximage2.c', 'image_render_mono', 3110, 3192),
+
+        ('./office_ghostscript/src/gximage0.c', 'gx_default_image_data', 2261, 2274):
+        ('./office_ghostscript/src/gximage0.c', 'gx_default_image_data', 2261, 2286),
+
+        ('./office_ghostscript/src/gscie.c', 'gs_cie_render_complete', 3765, 3775):
+        ('./office_ghostscript/src/gscie.c', 'gs_cie_render_complete', 3765, 3788),
+
+        ('./office_ghostscript/src/siscale.c', 's_IScale_process', 2094, 2168):
+        ('./office_ghostscript/src/siscale.c', 's_IScale_process', 2094, 2180),
+
+        #6
+    }
 
 def search_match(lookup_filename, func, line, linebe, term, bound):
+    t = (lookup_filename, func, line, linebe)
+    if INLINING_MATCHER.has_key(t):
+        lookup_filename, func, line, linebe = INLINING_MATCHER[t]
+
     for d in range(line):
         if not sloopy_classifications[lookup_filename][func].has_key(line-d):
             continue
@@ -99,16 +181,16 @@ def search_match(lookup_filename, func, line, linebe, term, bound):
         sc, slinesbe = sloopy_classifications[lookup_filename][func][line-d]
 
         # seems we found a match, find nearest backedge
-        # if linebe and linebe > line:
-        #     try:
-        #         min_value = min(slinebe-linebe for slinebe in slinesbe if slinebe-linebe >= 0)
+        if linebe and linebe - line > 4:
+            try:
+                min_value = min(slinebe-linebe for slinebe in slinesbe if slinebe-linebe >= 0)
 
-        #         # check if the found backedge is plausible
-        #         if min_value > BACKEDGE_RANGE:
-        #             continue
-        #     except ValueError:
-        #         # no backedge match
-        #         continue
+                # check if the found backedge is plausible
+                if min_value > BACKEDGE_RANGE:
+                    continue
+            except ValueError:
+                # no backedge match
+                continue
 
         # we found a match, so stop looking
         classify(sc, term, bound)
@@ -116,22 +198,26 @@ def search_match(lookup_filename, func, line, linebe, term, bound):
 
     return False
 
-# def search_backedge_match(lookup_filename, func, line, linebe, term, bound):
-#     for d in range(BACKEDGE_RANGE+1):
-#         if not sloopy_classificationsb[lookup_filename][func].has_key(linebe+d):
-#             continue
+def search_backedge_match(lookup_filename, func, line, linebe, term, bound):
+    t = (lookup_filename, func, line, linebe)
+    if INLINING_MATCHER.has_key(t):
+        lookup_filename, func, line, linebe = INLINING_MATCHER[t]
 
-#         sc, sline = sloopy_classificationsb[lookup_filename][func][linebe+d]
+    for d in range(BACKEDGE_RANGE+1):
+        if not sloopy_classificationsb[lookup_filename][func].has_key(linebe+d):
+            continue
 
-#         # check if the found header is plausible
-#         if line-sline > HEADER_RANGE:
-#             continue
+        sc, sline = sloopy_classificationsb[lookup_filename][func][linebe+d]
 
-#         # we found a match, so stop looking
-#         classify(sc, term, bound)
-#         return True
+        # check if the found header is plausible
+        if line-sline > HEADER_RANGE:
+            continue
 
-#     return False
+        # we found a match, so stop looking
+        classify(sc, term, bound)
+        return True
+
+    return False
 
 def parse_loopus():
     for l in lf:
@@ -148,8 +234,8 @@ def parse_loopus():
 
         if search_match(lookup_filename, func, line, linebe, term, bound):
             continue
-        # if search_backedge_match(lookup_filename, func, line, linebe, term, bound):
-        #     continue
+        if search_backedge_match(lookup_filename, func, line, linebe, term, bound):
+            continue
 
         print >> sys.stderr, '!0', lookup_filename, func, line, linebe
 
