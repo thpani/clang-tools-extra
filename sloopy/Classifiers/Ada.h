@@ -37,7 +37,7 @@ class MultiExitIntegerIterClassifier : public BaseIntegerIterClassifier {
 
 class MultiExitIntegerIterIncrSetSizeClassifier : public LoopClassifier {
   public:
-  void classify(const ASTContext* Context, const NaturalLoop *Loop) {
+  std::set<IncrementLoopInfo> classify(const ASTContext* Context, const NaturalLoop *Loop) {
     const MultiExitIntegerIterClassifier AFLC(Context);
     auto IncrementSet = AFLC.classify(Loop);
 
@@ -45,5 +45,6 @@ class MultiExitIntegerIterIncrSetSizeClassifier : public LoopClassifier {
     sstm << IncrementSet.size();
 
     LoopClassifier::classify(Loop, Success, "MultiExitIntegerIterIncrSetSize", sstm.str());
+    return IncrementSet;
   }
 };

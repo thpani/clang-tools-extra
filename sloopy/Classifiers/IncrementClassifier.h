@@ -37,6 +37,9 @@ struct IncrementLoopInfo {
   const Stmt *Statement;
   const VarDeclIntPair Delta;
   const VarDeclIntPair Bound;
+  bool operator<(const IncrementLoopInfo &Other) const {
+    return VD < Other.VD || Delta < Other.Delta || Bound < Other.Bound;
+  }
 };
 
 static IncrementInfo getIncrementInfo(const Expr *Expr, const std::string Marker, const ASTContext *Context, const TypePredicate TypePredicate) throw(checkerror) {
@@ -371,22 +374,22 @@ class IncrementClassifier : public LoopClassifier {
     IncrementClassifier(const std::string Marker) : LoopClassifier(), Marker(Marker) {}
     virtual ~IncrementClassifier() {}
 
-    std::vector<IncrementLoopInfo> classify(const NaturalLoop *Loop) const {
+    std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop) const {
       LoopVariableFinder Finder(this);
       auto LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
 
       if (LoopVarCandidates.size() == 0) {
         LoopClassifier::classify(Loop, Fail, Marker, "NoLoopVarCandidate");
-        return std::vector<IncrementLoopInfo>();
+        return std::set<IncrementLoopInfo>();
       }
 
       if (!checkPreds(Loop)) {
         LoopClassifier::classify(Loop, Fail, Marker, "TooManyExitArcs");
-        return std::vector<IncrementLoopInfo>();
+        return std::set<IncrementLoopInfo>();
       }
 
-      std::vector<std::string> reasons;
-      std::vector<IncrementLoopInfo> successes;
+      std::set<std::string> reasons;
+      std::set<IncrementLoopInfo> successes;
       std::vector<std::string> suffixes;
       for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
                                                  PE = Loop->getExit().pred_end();
@@ -410,10 +413,10 @@ class IncrementClassifier : public LoopClassifier {
             checkPseudoConstantSet(Loop);
 
             IncrementLoopInfo ILI = {I.VD, I.Statement, I.Delta, Bound};
-            successes.push_back(ILI);
+            successes.insert(ILI);
             suffixes.push_back(suffix);
           } catch(checkerror &e) {
-            reasons.push_back(e.what());
+            reasons.insert(e.what());
           }
         }
       }
@@ -422,9 +425,6 @@ class IncrementClassifier : public LoopClassifier {
         LoopClassifier::classify(Loop, Success, Marker, suffixes[0]);
         return successes;
       }
-      std::sort(reasons.begin(), reasons.end());
-      std::vector<std::string>::iterator it = std::unique (reasons.begin(), reasons.end());
-      reasons.resize( std::distance(reasons.begin(),it) );
 
       std::stringstream ss;
       for(auto reason : reasons) {
@@ -435,6 +435,6 @@ class IncrementClassifier : public LoopClassifier {
       assert(suffix.size()!=0);
 
       LoopClassifier::classify(Loop, suffix);
-      return std::vector<IncrementLoopInfo>();
+      return std::set<IncrementLoopInfo>();
     }
 };

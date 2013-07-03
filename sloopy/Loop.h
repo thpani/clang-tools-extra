@@ -48,6 +48,7 @@ class NaturalLoop {
     NaturalLoopBlock *Entry, *Exit;
     std::list<NaturalLoopBlock*> Blocks;
     std::set<const VarDecl*> ControlVars;
+    std::set<const CFGBlock*> Tails;
     Stmt *LoopStmt;
     std::string Identifier;
     NaturalLoop *Unsliced;
@@ -165,14 +166,41 @@ class NaturalLoop {
       }
     }
 
-    PresumedLoc getLoopStmtLocation(const SourceManager* SM) const {
-      Stmt *S = LoopStmt;
-      if (GotoStmt *GS = dyn_cast<GotoStmt>(S)) {
+    std::pair<const PresumedLoc, const std::vector<PresumedLoc>> getLoopStmtLocation(const SourceManager* SM) const {
+      const Stmt *S = LoopStmt;
+      if (const GotoStmt *GS = dyn_cast<GotoStmt>(S)) {
         S = GS->getLabel()->getStmt();
       }
-      SourceLocation SL = S->getSourceRange().getBegin();
-      PresumedLoc PL = SM->getPresumedLoc(SL);
-      return PL;
+      SourceLocation SLHead = S->getSourceRange().getBegin();
+      PresumedLoc PLHead = SM->getPresumedLoc(SLHead);
+
+      std::vector<PresumedLoc> PLBacks;
+      for (const CFGBlock *Tail : Tails) {
+        const Stmt *S;
+        if (Tail->getTerminator()) {
+          S = Tail->getTerminator().getStmt();
+        } else {
+          S = Tail->getLoopTarget();
+        }
+        if (!S) {
+          // block before labeled block that is the header
+          for (CFGBlock::const_reverse_iterator I = Tail->rbegin(),
+                                                E = Tail->rend();
+                                                I != E; I++) {
+            auto CStmt = I->getAs<CFGStmt>();
+            if (CStmt) {
+              S = CStmt->getStmt();
+              break;
+            }
+          }
+        }
+        assert(S);
+        SourceLocation SLBack = S->getSourceRange().getEnd();
+        PresumedLoc PLBack = SM->getPresumedLoc(SLBack);
+        PLBacks.push_back(PLBack);
+      }
+
+      return std::make_pair(PLHead, PLBacks);
     }
 
     std::set<const VarDecl*> getControlVars() const {
@@ -359,6 +387,7 @@ bool NaturalLoop::build(
 
   Entry = new NaturalLoopBlock(-1);
   Exit = new NaturalLoopBlock(0);
+  this->Tails = Tails;
   this->ControlVars = ControlVars;
   this->Unsliced = const_cast<NaturalLoop*>(Unsliced);
 

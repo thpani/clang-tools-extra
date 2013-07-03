@@ -6,11 +6,18 @@ import sys
 from collections import defaultdict
 from datetime import datetime
 
+PRINT_OFFSET = True
+
 if sys.argv[1] == 'cBench':
-    SLOOPY_ABS_START = '/Users/thomas/Documents/uni/da/llvm-build/bench/cBench15032013/'
+    SLOOPY_ABS_START = '/Users/thomas/Documents/uni/da/llvm-build/bench/cBenchPreprocessed/'
     SLOOPY_FILE = 'classifications_cBench.txt'
-    LLVM_ABS_START = '/files/sinn/cBench/'
-    LLVM_FILE = '24062013_summary.txt'
+    LLVM_ABS_START = '/files/sinn/cBenchPreprocessed/'
+    LLVM_FILE = '01072013_preprocessed_summary.txt'
+elif sys.argv[1] == 'consumer_jpeg':
+    SLOOPY_ABS_START = '/Users/thomas/Documents/uni/da/llvm-build/bench/cBenchPreprocessed/'
+    SLOOPY_FILE = 'classifications_cBench.txt'
+    LLVM_ABS_START = '/files/sinn/cBenchPreprocessed/'
+    LLVM_FILE = '01072013_preprocessed_summary.txt'
 elif sys.argv[1] == 'wcet':
     SLOOPY_ABS_START = '/Users/thomas/Documents/uni/da/llvm-build/bench/wcet/'
     SLOOPY_FILE = 'classifications_wcet.txt'
@@ -22,24 +29,17 @@ else:
 sf = open(SLOOPY_FILE)
 lf = open(LLVM_FILE)
 
+# sloopy_classifications[func][line]
 sloopy_classifications = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
+sloopy_classificationsb = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
 
-for line in sf:
-    filepath, _, func, _, line, classes = line.split(' ', 5)
-    line = int(line)
-
-    filepath = './'+os.path.relpath(filepath, SLOOPY_ABS_START)
-    classes = classes.split()
-
-    sloopy_classifications[filepath][func][line] = classes
-
-    # print line, func, filepath, classes
-
+# class results (count)
 results = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+# distribution results (list of ints)
 branch = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
-UNCLASS = 'nonsimple'
-SIMPLE = 'simple'
+UNCLASS = 'NotSingleExitSimple'
+SIMPLE = 'SingleExitSimple'
 SIMPLE_DETAILS = ('IntegerIter', 'DataIter', 'AArrayIter', 'PArrayIter')
 
 def isSimple(cls):
@@ -53,46 +53,110 @@ def simplify(clsses):
             return SIMPLE
     return UNCLASS
 
-for line in lf:
-    term, bound, line, linebe, func, filepath = line.split()
-    line = int(line)
+def parse_sloopy():
+    for line in sf:
+        filepath, _, func, _, line, _, linesbe, classes = line.split(' ', 7)
+        line = int(line)
+        linesbe = [ int(linebe) for linebe in linesbe.split(',')[:-1] ]
+        assert(line > 0)
+        assert(not 0 in linesbe)
 
-    if LLVM_ABS_START:
-        filepath = './'+os.path.relpath(filepath, LLVM_ABS_START)
-    if line == 0:
-        continue
+        filepath = './'+os.path.relpath(filepath, SLOOPY_ABS_START)
+        classes = classes.split()
 
-    fileName, fileExtension = os.path.splitext(filepath)
-    lookup_filename = fileName + '.c'
+        sloopy_classifications[filepath][func][line] = (classes, linesbe)
+        for linebe in linesbe:
+            sloopy_classificationsb[filepath][func][linebe] = (classes, line)
 
-    ok = False
+def classify(sc, term, bound):
+    # process classes
+    for cls in sc:
+        if 'Branch' in cls:
+            # Branch-Depth-3-Nodes-6
+            c, _, depth, _, nodes = cls.split('-')
+            depth, nodes = (int(depth), int(nodes))
+            branch[c.split('@')[1]+'depth'][term][bound].append(depth)
+            branch[c.split('@')[1]+'nodes'][term][bound].append(nodes)
+        elif 'ControlVars' in cls or 'IncrSetSize' in cls or 'Counters' in cls:
+            # ControlVars-3
+            c, num = cls.split('-')
+            num = int(num)
+            branch[c.split('@')[1]][term][bound].append(num)
+        elif '@' in cls:
+            results[term][bound][cls.split('@')[1].split('-')[0]] += 1
+            if simplify(sc) == UNCLASS and 'SingleExit' == cls.split('@')[1]:
+                results[term][bound]['SingleExitNonSimple'] += 1
+    results[term][bound][simplify(sc)] += 1
+
+HEADER_RANGE = 10
+BACKEDGE_RANGE = 10
+
+def search_match(lookup_filename, func, line, linebe, term, bound):
     for d in range(line):
-        sc = sloopy_classifications[lookup_filename][func][line-d]
-        if sc:
-            # print '-'+str(d), filepath, func, line, term, bound, sc
-            for cls in sc:
-                if 'Branch' in cls:
-                    # Branch-Depth-3-Nodes-6
-                    c, _, depth, _, nodes = cls.split('-')
-                    depth, nodes = (int(depth), int(nodes))
-                    if depth > 500:
-                        continue
-                    branch[c.split('@')[1]+'depth'][term][bound].append(depth)
-                    branch[c.split('@')[1]+'nodes'][term][bound].append(nodes)
-                elif 'ControlVars' in cls or 'IncrSetSize' in cls:
-                    # ControlVars-3
-                    c, num = cls.split('-')
-                    num = int(num)
-                    if num > 200:
-                        continue
-                    branch[c.split('@')[1]][term][bound].append(num)
-                elif '@' in cls:
-                    results[term][bound][cls.split('@')[1].split('-')[0]] += 1
-            results[term][bound][simplify(sc)] += 1
-            ok = True
-            break
-    if not ok:
-        print >> sys.stderr, '!!', filepath, func, line
+        if not sloopy_classifications[lookup_filename][func].has_key(line-d):
+            continue
+
+        sc, slinesbe = sloopy_classifications[lookup_filename][func][line-d]
+
+        # seems we found a match, find nearest backedge
+        # if linebe and linebe > line:
+        #     try:
+        #         min_value = min(slinebe-linebe for slinebe in slinesbe if slinebe-linebe >= 0)
+
+        #         # check if the found backedge is plausible
+        #         if min_value > BACKEDGE_RANGE:
+        #             continue
+        #     except ValueError:
+        #         # no backedge match
+        #         continue
+
+        # we found a match, so stop looking
+        classify(sc, term, bound)
+        return True
+
+    return False
+
+# def search_backedge_match(lookup_filename, func, line, linebe, term, bound):
+#     for d in range(BACKEDGE_RANGE+1):
+#         if not sloopy_classificationsb[lookup_filename][func].has_key(linebe+d):
+#             continue
+
+#         sc, sline = sloopy_classificationsb[lookup_filename][func][linebe+d]
+
+#         # check if the found header is plausible
+#         if line-sline > HEADER_RANGE:
+#             continue
+
+#         # we found a match, so stop looking
+#         classify(sc, term, bound)
+#         return True
+
+#     return False
+
+def parse_loopus():
+    for l in lf:
+        term, bound, line, linebe, func, filepath = l.split()
+        line = int(line)
+        linebe = int(linebe)
+
+        if LLVM_ABS_START:
+            filepath = './'+os.path.relpath(filepath, LLVM_ABS_START)
+        assert(line > 0)
+
+        fileName, _ = os.path.splitext(filepath)
+        lookup_filename = fileName + '.c'
+
+        if search_match(lookup_filename, func, line, linebe, term, bound):
+            continue
+        # if search_backedge_match(lookup_filename, func, line, linebe, term, bound):
+        #     continue
+
+        print >> sys.stderr, '!0', lookup_filename, func, line, linebe
+
+parse_sloopy()
+parse_loopus()
+
+sys.exit(0)
 
 print "==================================="
 print sys.argv[1]
@@ -156,8 +220,9 @@ def printresult(desc, key, crosssum=True):
     print
 
 CLASS_LIST = [(0, 1), (1, 2), (2, 3), (3, 10), (10, sys.maxint)]
+CLASS_LIST2 = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, sys.maxint)]
 
-def distribution(desc, type, subtype=('',)):
+def distribution(desc, type, subtype=('',), class_list=CLASS_LIST):
     print desc
     print "-" * len (desc)
     for x in subtype:
@@ -172,7 +237,7 @@ def distribution(desc, type, subtype=('',)):
             l = branch[type+x][y[0]][y[1]]
             print "%.2f\t%s" % (stdev(l), '║' if y == 'NN' else '|'),
         print
-        for r in CLASS_LIST:
+        for r in class_list:
             if (r[1] - r[0]) == 1:
                 print "%s = %d \t|" % (x if x else 'cnt', r[0]),
             else:
@@ -180,16 +245,19 @@ def distribution(desc, type, subtype=('',)):
             for y in ('YY', 'YN', 'NN'):
                 s = countif(type+x, r, y)
                 print "%d\t%s" % (s, '║' if y == 'NN' else '|'),
-            print "%.1f\t|" % (100.*countif(type+x, r, 'YY')/countall(type+x, r)),
+            try:
+                print "%.1f\t|" % (100.*countif(type+x, r, 'YY')/countall(type+x, r)),
+            except ZeroDivisionError:
+                print "%.1f\t|" % (100.),
             print countall(type+x, r)
-        print "\t\t\t\t\t\t ", sum([countall(type+x, r) for r in CLASS_LIST]), "(TOTAL)"
+        print "\t\t\t\t\t\t ", sum([countall(type+x, r) for r in class_list]), "(TOTAL)"
         print
 
+printresult("Single Exit vs. Multi Exit", ('MultiExit', 'SingleExit'), crosssum=False)
 
 printh("(Single Exit) Simple Loops", "Single exit that takes the simple form.\n")
 
-printresult("Single Exit vs. Multi Exit", ('SingleExit', 'MultiExit'))
-printresult("Simple Loops ⊆ Single Exit", ('SingleExit', SIMPLE), crosssum=False)
+printresult("Simple Loops ⊆ Single Exit", ('SingleExit', SIMPLE, 'SingleExitNonSimple'), crosssum=False)
 printresult("Simple Loop vs. Non-Simple (= non-simple single exit, or multi exit) (overview)", (UNCLASS, SIMPLE))
 printresult("Simple Loop vs. Non-Simple (= non-simple single exit, or multi exit) (class details)", (UNCLASS,) + SIMPLE_DETAILS)
 print "LP ... Loopus Performance, % of loops in the resp. class for which Loopus computes a bound.\n"
@@ -202,10 +270,15 @@ print "Still TODO...\n"
 
 printh("Semi-simple Loops", "Multiple exits, where SOME take the simple form.\n")
 
-printresult("Multi-exit Loops", ('MultiExitIntegerIter', 'MultiExitPArrayIter'))
-print "MultiExitAArrayIter, MultiExitDataIter are still TODO...\n"
-distribution("MultiExitIntegerIter Increment Variables", 'MultiExitIntegerIterIncrSetSize')
-distribution("MultiExitPArrayIter Increment Variables", 'MultiExitPArrayIterIncrSetSize')
+printresult("Semi-simple Loops ⊆ Multi Exit", ('MultiExit', 'MultiExitSimple'), crosssum=False)
+printresult("Semi-simple Loops vs. Non-semi-simple (overview)", ('MultiExitNonSimple', 'MultiExitSimple'))
+printresult("Semi-simple Loops vs. Non-semi-simple (class details)", ('MultiExitNonSimple', 'MultiExitIntegerIter', 'MultiExitDataIter', 'MultiExitAArrayIter', 'MultiExitPArrayIter'))
+distribution("MultiExit Unique Increments [= triples (counter-var, bound, delta) ]", 'MultiExitIncrSetSize', class_list=CLASS_LIST2)
+distribution("MultiExit Counter Variables", 'MultiExitCounters', class_list=CLASS_LIST2)
+# distribution("MultiExitIntegerIter Increment Variables", 'MultiExitIntegerIterIncrSetSize')
+# distribution("MultiExitDataIter Increment Variables", 'MultiExitDataIterIncrSetSize')
+# distribution("MultiExitAArrayIter Increment Variables", 'MultiExitAArrayIterIncrSetSize')
+# distribution("MultiExitPArrayIter Increment Variables", 'MultiExitPArrayIterIncrSetSize')
 
 
 printh("Influencing/-ed loops")
@@ -214,7 +287,7 @@ printresult("Outer loop influenced by inner (inner remains in slice)", 'Influenc
 printresult("Inner loop influences outer (inner remains in slice)", 'InfluencesOuter')
 
 
-printh("Amortized Loops (for multi-exit IntegerIter loops ONLY)")
+printh("Amortized Loops")
 
 printresult("Amortized A1 (inner loop counter incremented)", ('AmortA1', 'AmortA1InnerEqOuter'), crosssum=False)
 printresult("Amortized A2 (inner loop counter never defined)", ('AmortA2', 'AmortA2InnerEqOuter'), crosssum=False)

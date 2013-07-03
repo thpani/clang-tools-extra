@@ -173,8 +173,7 @@ class SimpleLoopCounter : public LoopClassifier {
       unsigned PredSize = Loop->getExit().pred_size();
       if (PredSize == 1) {
         LoopClassifier::classify(Loop, "SingleExit");
-      } else if (PredSize > 1) {
-        LoopClassifier::classify(Loop, "MultiExit");
       }
+      LoopClassifier::classify(Loop, "MultiExit");
     }
 };

@@ -20,6 +20,7 @@
 #include "Classifiers/DataIter.h"
 #include "Classifiers/ArrayIter.h"
 #include "Classifiers/Influence.h"
+#include "Classifiers/MultiExit.h"
 /* #include "Classifiers/EmptyBody.h" */
 /* #include "Classifiers/Cond.h" */
 
@@ -389,53 +390,46 @@ void classify(
   Ar.classify(SlicedOuterLoop);
 
   // Test
-  MultiExitIntegerIterIncrSetSizeClassifier MEAISSC;
-  MEAISSC.classify(Context, SlicedAllLoops);
-  MultiExitArrayIterIncrSetSizeClassifier MEAIISSC;
-  MEAIISSC.classify(Context, SlicedAllLoops);
-
-#if 0
-  MultiExitIntegerIterClassifier MEAC(Context);
-  auto IMEAC = MEAC.classify(SlicedAllLoops);
-  if (isSpecified && DumpIncrementVars) {
-    for (auto I : IMEAC) {
-      llvm::errs() << "(incr: " << I.VD->getNameAsString() << ", ";
-      llvm::errs() << "bound: ";
-      if (I.Bound.Var) {
-        llvm::errs() << I.Bound.Var->getNameAsString();
-      } else {
-        llvm::errs() << I.Bound.Int.getSExtValue();
+  {
+    MultiExitIncrSetSizeClassifier C(Context);
+    auto IMEAC = C.classify(SlicedAllLoops);
+    if (IMEAC.size() > 7 || isSpecified && DumpIncrementVars) {
+      for (auto I : IMEAC) {
+        llvm::errs() << "(incr: " << I.VD->getNameAsString() << ", ";
+        llvm::errs() << "bound: ";
+        if (I.Bound.Var) {
+          llvm::errs() << I.Bound.Var->getNameAsString();
+        } else {
+          llvm::errs() << I.Bound.Int.getSExtValue();
+        }
+        llvm::errs() << ", ";
+        llvm::errs() << "delta: ";
+        if (I.Delta.Var) {
+          llvm::errs() << I.Delta.Var->getNameAsString();
+        } else {
+          llvm::errs() << I.Delta.Int.getSExtValue();
+        }
+        llvm::errs() << ")\n";
       }
-      llvm::errs() << ", ";
-      llvm::errs() << "delta: ";
-      if (I.Delta.Var) {
-        llvm::errs() << I.Delta.Var->getNameAsString();
-      } else {
-        llvm::errs() << I.Delta.Int.getSExtValue();
-      }
-      llvm::errs() << ")\n";
+      llvm::errs() << "----------\n";
     }
   }
-  MultiExitArrayIterClassifier MEAIC(Context);
-  IMEAC = MEAIC.classify(SlicedAllLoops);
-  if (isSpecified && DumpIncrementVars) {
-    for (auto I : IMEAC) {
-      llvm::errs() << "(incr: " << I.VD->getNameAsString() << ", ";
-      llvm::errs() << "bound: ";
-      if (I.Bound.Var) {
-        llvm::errs() << I.Bound.Var->getNameAsString();
-      } else {
-        llvm::errs() << I.Bound.Int.getSExtValue();
-      }
-      llvm::errs() << ", ";
-      llvm::errs() << "delta: ";
-      if (I.Delta.Var) {
-        llvm::errs() << I.Delta.Var->getNameAsString();
-      } else {
-        llvm::errs() << I.Delta.Int.getSExtValue();
-      }
-      llvm::errs() << ")\n";
-    }
+#if 0 // called by MultiExitIncrSetSizeClassifier
+  {
+    MultiExitIntegerIterIncrSetSizeClassifier C;
+    C.classify(Context, SlicedAllLoops);
+  }
+  {
+    MultiExitDataIterIncrSetSizeClassifier C;
+    C.classify(Context, SlicedAllLoops);
+  }
+  {
+    MultiExitAdaArrayForLoopIncrSetSizeClassifier C;
+    C.classify(Context, SlicedAllLoops);
+  }
+  {
+    MultiExitArrayIterIncrSetSizeClassifier C;
+    C.classify(Context, SlicedAllLoops);
   }
 #endif
 
@@ -573,9 +567,15 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         const NaturalLoop *SlicedAllLoops = buildNaturalLoop(Loop, Unsliced, CDG, SC);
         const NaturalLoop *SlicedOuterLoop = buildNaturalLoop(Loop, Unsliced, CDG, slicingCriterionOuterLoop(Loop));
 
-        PresumedLoc PL = Unsliced->getLoopStmtLocation(Result.SourceManager);
+        auto LocationPair = Unsliced->getLoopStmtLocation(Result.SourceManager);
         std::stringstream sstm;
-        sstm << PL.getFilename() << " -func " << D->getNameAsString() << " -line " << PL.getLine();
+        sstm << LocationPair.first.getFilename()
+             << " -func " << D->getNameAsString()
+             << " -line " << LocationPair.first.getLine()
+             << " -linebe ";
+        for (auto PLBack : LocationPair.second) {
+          sstm << PLBack.getLine() << ",";
+        }
         LoopLocationMap[Unsliced] = sstm.str();
 
         M[Loop].push_back(Unsliced);
@@ -588,7 +588,8 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         const NaturalLoop *SlicedAllLoops = M[MLD][1];
         const NaturalLoop *SlicedOuterLoop = M[MLD][2];
 
-        PresumedLoc PL = Unsliced->getLoopStmtLocation(Result.SourceManager);
+        auto LocationPair = Unsliced->getLoopStmtLocation(Result.SourceManager);
+        PresumedLoc PL = LocationPair.first;
         if (isSpecified(D, PL)) {
           if (!LoopStats) {
             llvm::errs() << LoopLocationMap[Unsliced] << "\n";

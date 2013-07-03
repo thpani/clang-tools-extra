@@ -89,27 +89,27 @@ if [[ $2 == "run" ]] ; then
     elif [[ ${BENCH} == "wcet" ]] ; then
         FILES=$(find ${BENCH_DIR}/wcet/ -not -name des.c -and -name '*.c')
     elif [[ ${BENCH} == "cBench" ]] ; then
-        FILES=$(find ${BENCH_DIR}/cBench15032013/ -name '*.c')
+        FILES=$(find ${BENCH_DIR}/cBenchPreprocessed/ -name '*.c')
 
-        INCLUDES=$(find ${BENCH_DIR}/cBench15032013/ -name '*.c' | xargs -L1 dirname | sort | uniq | sed 's/^/-I/' | tr '\n' ' ')
-        # consumer_mad
-        INCLUDES="$INCLUDES -I${BENCH_DIR}/esound-0.2.8 -I${BENCH_DIR}/audiofile-0.3.6/libaudiofile/"
-        # consumer_mad & office_ghostscript & network_patricia
-        INCLUDES="$INCLUDES -I${BENCH_DIR}/include/"
+        # INCLUDES=$(find ${BENCH_DIR}/cBenchPreprocessed/ -name '*.c' | xargs -L1 dirname | sort | uniq | sed 's/^/-I/' | tr '\n' ' ')
+        # # consumer_mad
+        # INCLUDES="$INCLUDES -I${BENCH_DIR}/esound-0.2.8 -I${BENCH_DIR}/audiofile-0.3.6/libaudiofile/"
+        # # consumer_mad & office_ghostscript & network_patricia
+        # INCLUDES="$INCLUDES -I${BENCH_DIR}/include/"
 
-        # automotive_{bitcount,qsort1}
-        DEFINES="-DEXIT_FAILURE=1"
-        # consumer_mad
-        DEFINES="$DEFINES -DFPM_DEFAULT -DHAVE_CONFIG_H -DLOCALEDIR=\"/usr/local/share/locale\""
-        # consumer_lame
-        DEFINES="$DEFINES -DLAMESNDFILE -DHAVEMPGLIB -DLAMEPARSE"
-        # office_stringsearch1 / security_pgp_d
-        DEFINES="$DEFINES -DUNIX -DPORTABLE"
-        # telecom_gsm
-        DEFINES="$DEFINES -DSASR -DSTUPID_COMPILER -DNeedFunctionPrototypes=1"
+        # # automotive_{bitcount,qsort1}
+        # DEFINES="-DEXIT_FAILURE=1"
+        # # consumer_mad
+        # DEFINES="$DEFINES -DFPM_DEFAULT -DHAVE_CONFIG_H -DLOCALEDIR=\"/usr/local/share/locale\""
+        # # consumer_lame
+        # DEFINES="$DEFINES -DLAMESNDFILE -DHAVEMPGLIB -DLAMEPARSE"
+        # # office_stringsearch1 / security_pgp_d
+        # DEFINES="$DEFINES -DUNIX -DPORTABLE"
+        # # telecom_gsm
+        # DEFINES="$DEFINES -DSASR -DSTUPID_COMPILER -DNeedFunctionPrototypes=1"
 
-        # security_pgp_d/src/zdeflate -> defines i386
-        FLAGS="-m32"
+        # # security_pgp_d/src/zdeflate -> defines i386
+        # FLAGS="-m32"
     fi
     echo "BENCH\t$BENCH">$BENCH.stats
 

@@ -1,6 +1,6 @@
 #pragma once
 
-class DataIterClassifier : public IncrementClassifier {
+class BaseDataIterClassifier : public IncrementClassifier {
   protected:
     IncrementInfo getIncrementInfo(const Expr *Expr) const throw (checkerror) {
       if (Expr == NULL) throw checkerror(Fail, Marker, "Inc_None");
@@ -36,5 +36,35 @@ class DataIterClassifier : public IncrementClassifier {
     }
 
   public:
-    DataIterClassifier() : IncrementClassifier("DataIter") {}
+    BaseDataIterClassifier(const std::string Marker) : IncrementClassifier(Marker) {}
+};
+
+class DataIterClassifier : public BaseDataIterClassifier {
+  public:
+    DataIterClassifier() : BaseDataIterClassifier("DataIter") {}
+};
+
+class MultiExitDataIterClassifier : public BaseDataIterClassifier {
+  protected:
+    virtual bool checkPreds(const NaturalLoop *Loop) const {
+      unsigned PredSize = Loop->getExit().pred_size();
+      assert(PredSize > 0);
+      return true;
+    }
+  public:
+    MultiExitDataIterClassifier() : BaseDataIterClassifier("MultiExitDataIter") {}
+};
+
+class MultiExitDataIterIncrSetSizeClassifier : public LoopClassifier {
+  public:
+  std::set<IncrementLoopInfo> classify(const ASTContext* Context, const NaturalLoop *Loop) {
+    const MultiExitDataIterClassifier AFLC;
+    auto IncrementSet = AFLC.classify(Loop);
+
+    std::stringstream sstm;
+    sstm << IncrementSet.size();
+
+    LoopClassifier::classify(Loop, Success, "MultiExitDataIterIncrSetSize", sstm.str());
+    return IncrementSet;
+  }
 };

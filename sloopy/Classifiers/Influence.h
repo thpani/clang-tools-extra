@@ -1,5 +1,7 @@
 #pragma once
 
+#include "MultiExit.h"
+
 class InnerInfluencesOuterClassifier : public LoopClassifier {
   bool IsCurrentHeaderBlock (const NaturalLoopBlock *Block) {
     return Block->getBlockID() == CurrentHeaderBlockID;
@@ -56,7 +58,7 @@ class AmortizedTypeAClassifier : public LoopClassifier {
     void classify(const ASTContext* Context, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) {
       if (Loop == OutermostNestingLoop) return;
 
-      const MultiExitIntegerIterClassifier AFLC(Context);
+      const MultiExitIncrSetSizeClassifier AFLC(Context);
       auto IncrementSet = AFLC.classify(Loop);
       if (!IncrementSet.size()) return;
 
@@ -110,7 +112,7 @@ class AmortizedTypeA2Classifier : public LoopClassifier {
     void classify(const ASTContext* Context, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) {
       if (Loop == OutermostNestingLoop) return;
 
-      const MultiExitIntegerIterClassifier AFLC(Context);
+      const MultiExitIncrSetSizeClassifier AFLC(Context);
       auto IncrementSet = AFLC.classify(Loop);
       if (!IncrementSet.size()) return;
 
@@ -161,7 +163,7 @@ class AmortizedTypeBClassifier : public LoopClassifier {
     void classify(const ASTContext* Context, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) {
       if (Loop == OutermostNestingLoop) return;
 
-      const MultiExitIntegerIterClassifier AFLC(Context);
+      const MultiExitIncrSetSizeClassifier AFLC(Context);
       auto IncrementSet = AFLC.classify(Loop);
       if (!IncrementSet.size()) return;
 
