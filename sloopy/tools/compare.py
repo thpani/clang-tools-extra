@@ -92,7 +92,7 @@ def classify(sc, term, bound):
                 results[term][bound]['SingleExitNonSimple'] += 1
     results[term][bound][simplify(sc)] += 1
 
-HEADER_RANGE = 1
+HEADER_RANGE = 0
 BACKEDGE_RANGE = 8
 
 INLINING_MATCHER = {
@@ -167,6 +167,10 @@ INLINING_MATCHER = {
         ('./office_ghostscript/src/siscale.c', 's_IScale_process', 2094, 2180),
 
         #6
+
+        # ???!?!?
+        ('./office_ghostscript/src/gsutil.c', 'string_match', 625, 603):
+        ('./office_ghostscript/src/gsutil.c', 'string_match', 598, 603),
     }
 
 def search_match(lookup_filename, func, line, linebe, term, bound):
@@ -241,8 +245,6 @@ def parse_loopus():
 
 parse_sloopy()
 parse_loopus()
-
-sys.exit(0)
 
 print "==================================="
 print sys.argv[1]
