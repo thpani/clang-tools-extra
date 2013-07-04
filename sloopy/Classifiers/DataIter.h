@@ -36,35 +36,7 @@ class BaseDataIterClassifier : public IncrementClassifier {
     }
 
   public:
-    BaseDataIterClassifier(const std::string Marker) : IncrementClassifier(Marker) {}
+    BaseDataIterClassifier(const std::string Marker, const ASTContext* Context) : IncrementClassifier(Marker) {}
 };
 
-class DataIterClassifier : public BaseDataIterClassifier {
-  public:
-    DataIterClassifier() : BaseDataIterClassifier("DataIter") {}
-};
-
-class MultiExitDataIterClassifier : public BaseDataIterClassifier {
-  protected:
-    virtual bool checkPreds(const NaturalLoop *Loop) const {
-      unsigned PredSize = Loop->getExit().pred_size();
-      assert(PredSize > 0);
-      return true;
-    }
-  public:
-    MultiExitDataIterClassifier() : BaseDataIterClassifier("MultiExitDataIter") {}
-};
-
-class MultiExitDataIterIncrSetSizeClassifier : public LoopClassifier {
-  public:
-  std::set<IncrementLoopInfo> classify(const ASTContext* Context, const NaturalLoop *Loop) {
-    const MultiExitDataIterClassifier AFLC;
-    auto IncrementSet = AFLC.classify(Loop);
-
-    std::stringstream sstm;
-    sstm << IncrementSet.size();
-
-    LoopClassifier::classify(Loop, Success, "MultiExitDataIterIncrSetSize", sstm.str());
-    return IncrementSet;
-  }
-};
+ITER_CLASSIFIERS(DataIter)

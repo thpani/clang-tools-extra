@@ -5,6 +5,9 @@
 struct VarDeclIntPair {
   const VarDecl *Var;
   llvm::APInt Int;
+  static VarDeclIntPair create() {
+    return { NULL, llvm::APInt() };
+  }
   bool operator==(const VarDeclIntPair &Other) const {
     if (Var || Other.Var) return Var == Other.Var;
     return Int.getBitWidth() > 1 && Other.Int.getBitWidth() > 1 && llvm::APInt::isSameValue(Int, Other.Int);
@@ -405,7 +408,6 @@ class IncrementClassifier : public LoopClassifier {
             DefUseHelper CondDUH(Cond);
             for (auto VD : CondDUH.getDefsAndUses()) {
               if (VD == I.VD) continue;
-              if (VD == Bound.Var && Bound.Var == I.VD) continue;
               std::string name = I.VD == Bound.Var ? "N" : (I.VD == I.Delta.Var ? "D" : "X");
               /* std::string name = I.VD == Bound.Var ? "N" : (I.VD == I.Delta ? "D" : VD->getNameAsString()); */
               addPseudoConstantVar(name, VD);

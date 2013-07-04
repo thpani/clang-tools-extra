@@ -2,7 +2,7 @@
 
 #include "IncrementClassifier.h"
 
-class BaseAdaArrayForLoopClassifier : public IncrementClassifier {
+class BaseAArrayIterClassifier : public IncrementClassifier {
   private:
     const ASTContext *Context;
 
@@ -118,36 +118,8 @@ class BaseAdaArrayForLoopClassifier : public IncrementClassifier {
     }
 
   public:
-    BaseAdaArrayForLoopClassifier(const std::string Marker, const ASTContext* Context) : IncrementClassifier(Marker), Context(Context) {}
+    BaseAArrayIterClassifier(const std::string Marker, const ASTContext* Context) : IncrementClassifier(Marker), Context(Context) {}
 
 };
 
-class AdaArrayForLoopClassifier : public BaseAdaArrayForLoopClassifier {
-  public:
-    AdaArrayForLoopClassifier(const ASTContext *Context) : BaseAdaArrayForLoopClassifier("AArrayIter", Context) {}
-};
-
-class MultiExitAdaArrayForLoopClassifier : public BaseAdaArrayForLoopClassifier {
-  protected:
-    virtual bool checkPreds(const NaturalLoop *Loop) const {
-      unsigned PredSize = Loop->getExit().pred_size();
-      assert(PredSize > 0);
-      return true;
-    }
-  public:
-    MultiExitAdaArrayForLoopClassifier(const ASTContext *Context) : BaseAdaArrayForLoopClassifier("MultiExitAArrayIter", Context) {}
-};
-
-class MultiExitAdaArrayForLoopIncrSetSizeClassifier : public LoopClassifier {
-  public:
-  std::set<IncrementLoopInfo> classify(const ASTContext* Context, const NaturalLoop *Loop) {
-    const MultiExitAdaArrayForLoopClassifier AFLC(Context);
-    auto IncrementSet = AFLC.classify(Loop);
-
-    std::stringstream sstm;
-    sstm << IncrementSet.size();
-
-    LoopClassifier::classify(Loop, Success, "MultiExitAArrayIterIncrSetSize", sstm.str());
-    return IncrementSet;
-  }
-};
+ITER_CLASSIFIERS(AArrayIter)

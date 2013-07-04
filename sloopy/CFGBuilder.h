@@ -14,6 +14,7 @@
 #include "Loop.h"
 #include "LoopMatchers.h"
 #include "DefUse.h"
+#include "Classifiers/GenericIncrementIter.h"
 #include "Classifiers/Ada.h"
 #include "Classifiers/AdaArray.h"
 #include "Classifiers/Branch.h"
@@ -40,6 +41,7 @@ llvm::cl::opt<bool> DumpIncrementVars("dump-increment-vars");
 llvm::cl::opt<bool> DumpControlVars("dump-control-vars");
 llvm::cl::opt<bool> DumpControlVarsDetail("dump-control-vars-detail");
 llvm::cl::opt<bool> DumpClasses("dump-classes");
+llvm::cl::opt<bool> DumpClassesAll("dump-classes-all");
 llvm::cl::opt<bool> DumpAST("dump-ast");
 llvm::cl::opt<bool> DumpStmt("dump-stmt");
 llvm::cl::opt<std::string> Function("func");
@@ -351,6 +353,7 @@ static SlicingCriterion slicingCriterionAllLoops(const MergedLoopDescriptor &Loo
 
 void classify(
     const bool isSpecified,
+    const NaturalLoop *Unsliced,
     const NaturalLoop *SlicedAllLoops,
     const NaturalLoop *SlicedOuterLoop,
     const NaturalLoop *OutermostNestingLoop,
@@ -378,15 +381,15 @@ void classify(
   CVC2.classify(SlicedOuterLoop);
 
   // Simple Plans
-  DataIterClassifier DIC;
+  DataIterClassifier DIC(Context);
   DIC.classify(SlicedOuterLoop);
-  AdaArrayForLoopClassifier AA(Context);
+  AArrayIterClassifier AA(Context);
   auto I = AA.classify(SlicedOuterLoop);
   if (!I.size()) {
     IntegerIterClassifier A(Context);
     auto Increments = A.classify(SlicedOuterLoop);
   }
-  ArrayIterClassifier Ar(Context);
+  PArrayIterClassifier Ar(Context);
   Ar.classify(SlicedOuterLoop);
 
   // Test
@@ -413,24 +416,10 @@ void classify(
       }
     }
   }
-#if 0 // called by MultiExitIncrSetSizeClassifier
   {
-    MultiExitIntegerIterIncrSetSizeClassifier C;
-    C.classify(Context, SlicedAllLoops);
+    MultiExitNoCondIntegerIterClassifier C(Context);
+    C.classify(Unsliced);
   }
-  {
-    MultiExitDataIterIncrSetSizeClassifier C;
-    C.classify(Context, SlicedAllLoops);
-  }
-  {
-    MultiExitAdaArrayForLoopIncrSetSizeClassifier C;
-    C.classify(Context, SlicedAllLoops);
-  }
-  {
-    MultiExitArrayIterIncrSetSizeClassifier C;
-    C.classify(Context, SlicedAllLoops);
-  }
-#endif
 
   // Influence
   InnerInfluencesOuterClassifier IIOC;
@@ -644,16 +633,18 @@ class FunctionCallback : public MatchFinder::MatchCallback {
           ProperlyNestedLoops.push_back(M[**I][1]);
         }
 
-        classify(isSpecified(D, PL), SlicedAllLoops, SlicedOuterLoop, OutermostNestingLoop, NestingLoops, ProperlyNestedLoops, Result.Context);
+        classify(isSpecified(D, PL), Unsliced, SlicedAllLoops, SlicedOuterLoop, OutermostNestingLoop, NestingLoops, ProperlyNestedLoops, Result.Context);
 
         if (isSpecified(D, PL)) {
-          if (DumpClasses) {
+          if (DumpClasses || DumpClassesAll) {
             for (auto Class : Classifications[Unsliced]) {
-              llvm::errs() << Class << " ";
+              if (DumpClassesAll || (Class.find("!") == std::string::npos && Class.find("?") == std::string::npos)) {
+                llvm::errs() << Class << " ";
+              }
             }
             llvm::errs() << "\n";
           }
-          if (DumpBlocks || DumpControlVars || DumpControlVarsDetail || DumpClasses || DumpAST || DumpStmt || DumpIncrementVars) {
+          if (DumpBlocks || DumpControlVars || DumpControlVarsDetail || DumpClasses || DumpClassesAll || DumpAST || DumpStmt || DumpIncrementVars) {
             llvm::errs() << "----------\n";
           }
         }

@@ -1,6 +1,11 @@
 #pragma once
 
-class MultiExitIncrSetSizeClassifier : public LoopClassifier {
+template <class IntegerIterClassifier,
+          class AArrayIterClassifier,
+          class PArrayIterClassifier,
+          class DataIterClassifier,
+          typename Marker>
+class BaseIncrSetSizeClassifier : public LoopClassifier {
   const ASTContext* Context;
   void collectIncrementSet(const std::set<IncrementLoopInfo> From, std::set<IncrementLoopInfo> &To) const {
     for (auto ILI : From) {
@@ -8,40 +13,40 @@ class MultiExitIncrSetSizeClassifier : public LoopClassifier {
     }
   }
   public:
-  MultiExitIncrSetSizeClassifier(const ASTContext* Context) : Context(Context) {}
-  std::set<IncrementLoopInfo> classify(const NaturalLoop *SlicedAllLoops) const {
+  BaseIncrSetSizeClassifier(const ASTContext* Context) : Context(Context) {}
+  std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop) const {
       std::set<IncrementLoopInfo> Result, CombinedSet;
       {
-          MultiExitAdaArrayForLoopIncrSetSizeClassifier C;
-          Result = C.classify(Context, SlicedAllLoops);
+          IntegerIterClassifier C;
+          Result = C.classify(Context, Loop);
           collectIncrementSet(Result, CombinedSet);
       }
       {
-          MultiExitIntegerIterIncrSetSizeClassifier C;
-          Result = C.classify(Context, SlicedAllLoops);
+          AArrayIterClassifier C;
+          Result = C.classify(Context, Loop);
           collectIncrementSet(Result, CombinedSet);
       }
       {
-          MultiExitDataIterIncrSetSizeClassifier C;
-          Result = C.classify(Context, SlicedAllLoops);
+          PArrayIterClassifier C;
+          Result = C.classify(Context, Loop);
           collectIncrementSet(Result, CombinedSet);
       }
       {
-          MultiExitArrayIterIncrSetSizeClassifier C;
-          Result = C.classify(Context, SlicedAllLoops);
+          DataIterClassifier C;
+          Result = C.classify(Context, Loop);
           collectIncrementSet(Result, CombinedSet);
       }
 
       if (CombinedSet.size() == 0) {
-        LoopClassifier::classify(SlicedAllLoops, Success, "MultiExitNonSimple");
+        LoopClassifier::classify(Loop, Success, Marker::asString()+"NonSimple");
       } else {
-        LoopClassifier::classify(SlicedAllLoops, Success, "MultiExitSimple");
+        LoopClassifier::classify(Loop, Success, Marker::asString()+"Simple");
       }
 
       std::stringstream sstm;
       sstm << CombinedSet.size();
 
-      LoopClassifier::classify(SlicedAllLoops, Success, "MultiExitIncrSetSize", sstm.str());
+      LoopClassifier::classify(Loop, Success, Marker::asString()+"IncrSetSize", sstm.str());
 
       std::set<const VarDecl*> Counters;
       for (auto ILI : CombinedSet) {
@@ -51,8 +56,17 @@ class MultiExitIncrSetSizeClassifier : public LoopClassifier {
       sstm.str(std::string());
       sstm << Counters.size();
 
-      LoopClassifier::classify(SlicedAllLoops, Success, "MultiExitCounters", sstm.str());
+      LoopClassifier::classify(Loop, Success, Marker::asString()+"Counters", sstm.str());
 
       return CombinedSet;
     }
 };
+
+typedef STR_HOLDER("MultiExit") Str_MultiExit;
+typedef BaseIncrSetSizeClassifier<
+  MultiExitIntegerIterIncrSetSizeClassifier,
+  MultiExitAArrayIterIncrSetSizeClassifier,
+  MultiExitPArrayIterIncrSetSizeClassifier,
+  MultiExitDataIterIncrSetSizeClassifier,
+  Str_MultiExit>
+  MultiExitIncrSetSizeClassifier;
