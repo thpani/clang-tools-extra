@@ -425,6 +425,14 @@ class IncrementClassifier : public LoopClassifier {
         }
       }
       if (successes.size()) {
+        std::set<const VarDecl*> Counters;
+        for (auto ILI : successes) {
+          Counters.insert(ILI.VD);
+        }
+        std::stringstream sstm;
+        sstm << Counters.size();
+        LoopClassifier::classify(Loop, Success, Marker+"Counters", sstm.str());
+
         // TODO concat unique suffixes
         LoopClassifier::classify(Loop, Success, Marker, suffixes[0]);
         return successes;

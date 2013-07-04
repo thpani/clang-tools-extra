@@ -5,7 +5,7 @@ template <class IntegerIterClassifier,
           class PArrayIterClassifier,
           class DataIterClassifier,
           typename Marker>
-class BaseIncrSetSizeClassifier : public LoopClassifier {
+class BaseClassifier : public LoopClassifier {
   const ASTContext* Context;
   void collectIncrementSet(const std::set<IncrementLoopInfo> From, std::set<IncrementLoopInfo> &To) const {
     for (auto ILI : From) {
@@ -13,27 +13,27 @@ class BaseIncrSetSizeClassifier : public LoopClassifier {
     }
   }
   public:
-  BaseIncrSetSizeClassifier(const ASTContext* Context) : Context(Context) {}
+  BaseClassifier(const ASTContext* Context) : Context(Context) {}
   std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop) const {
       std::set<IncrementLoopInfo> Result, CombinedSet;
       {
-          IntegerIterClassifier C;
-          Result = C.classify(Context, Loop);
+          IntegerIterClassifier C(Context);
+          Result = C.classify(Loop);
           collectIncrementSet(Result, CombinedSet);
       }
       {
-          AArrayIterClassifier C;
-          Result = C.classify(Context, Loop);
+          AArrayIterClassifier C(Context);
+          Result = C.classify(Loop);
           collectIncrementSet(Result, CombinedSet);
       }
       {
-          PArrayIterClassifier C;
-          Result = C.classify(Context, Loop);
+          PArrayIterClassifier C(Context);
+          Result = C.classify(Loop);
           collectIncrementSet(Result, CombinedSet);
       }
       {
-          DataIterClassifier C;
-          Result = C.classify(Context, Loop);
+          DataIterClassifier C(Context);
+          Result = C.classify(Loop);
           collectIncrementSet(Result, CombinedSet);
       }
 
@@ -44,9 +44,9 @@ class BaseIncrSetSizeClassifier : public LoopClassifier {
       }
 
       std::stringstream sstm;
-      sstm << CombinedSet.size();
+      /* sstm << CombinedSet.size(); */
 
-      LoopClassifier::classify(Loop, Success, Marker::asString()+"IncrSetSize", sstm.str());
+      /* LoopClassifier::classify(Loop, Success, Marker::asString()+"Counters", sstm.str()); */
 
       std::set<const VarDecl*> Counters;
       for (auto ILI : CombinedSet) {
@@ -63,19 +63,19 @@ class BaseIncrSetSizeClassifier : public LoopClassifier {
 };
 
 typedef STR_HOLDER("MultiExit") Str_MultiExit;
-typedef BaseIncrSetSizeClassifier<
-  MultiExitIntegerIterIncrSetSizeClassifier,
-  MultiExitAArrayIterIncrSetSizeClassifier,
-  MultiExitPArrayIterIncrSetSizeClassifier,
-  MultiExitDataIterIncrSetSizeClassifier,
+typedef BaseClassifier<
+  MultiExitIntegerIterClassifier,
+  MultiExitAArrayIterClassifier,
+  MultiExitPArrayIterClassifier,
+  MultiExitDataIterClassifier,
   Str_MultiExit>
-  MultiExitIncrSetSizeClassifier;
+  MultiExitClassifier;
 
 typedef STR_HOLDER("MultiExitNoCond") Str_MultiExitNoCond;
-typedef BaseIncrSetSizeClassifier<
-  MultiExitNoCondIntegerIterIncrSetSizeClassifier,
-  MultiExitNoCondAArrayIterIncrSetSizeClassifier,
-  MultiExitNoCondPArrayIterIncrSetSizeClassifier,
-  MultiExitNoCondDataIterIncrSetSizeClassifier,
+typedef BaseClassifier<
+  MultiExitNoCondIntegerIterClassifier,
+  MultiExitNoCondAArrayIterClassifier,
+  MultiExitNoCondPArrayIterClassifier,
+  MultiExitNoCondDataIterClassifier,
   Str_MultiExitNoCond>
-  MultiExitNoCondIncrSetSizeClassifier;
+  MultiExitNoCondClassifier;

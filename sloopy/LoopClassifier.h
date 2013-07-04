@@ -180,16 +180,3 @@ class AnyLoopCounter {
       Classifications[Loop->getUnsliced()].insert("ANY");
     }
 };
-
-class SimpleLoopCounter : public LoopClassifier {
-  public:
-    void classify(const NaturalLoop* Loop) const {
-      unsigned PredSize = Loop->getExit().pred_size();
-      if (PredSize == 1) {
-        LoopClassifier::classify(Loop, "SingleExit");
-      } else {
-        LoopClassifier::classify(Loop, "NonSingleExit");
-      }
-      LoopClassifier::classify(Loop, "MultiExit");
-    }
-};

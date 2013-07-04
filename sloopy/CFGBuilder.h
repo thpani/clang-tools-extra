@@ -395,7 +395,7 @@ void classify(
 
   // Test
   {
-    MultiExitIncrSetSizeClassifier C(Context);
+    MultiExitClassifier C(Context);
     auto IMEAC = C.classify(SlicedAllLoops);
     if (isSpecified && DumpIncrementVars) {
       for (auto I : IMEAC) {
@@ -442,7 +442,7 @@ void classify(
   IIOC.classify(ProperlyNestedLoops, SlicedOuterLoop);
 
   // Simple control flow
-  SimpleLoopCounter SLC;
+  ExitClassifier SLC;
   SLC.classify(SlicedAllLoops);
 }
 

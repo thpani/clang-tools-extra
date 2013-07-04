@@ -81,7 +81,7 @@ def classify(sc, term, bound):
             depth, nodes = (int(depth), int(nodes))
             branch[c.split('@')[1]+'depth'][term][bound].append(depth)
             branch[c.split('@')[1]+'nodes'][term][bound].append(nodes)
-        elif 'ControlVars' in cls or 'IncrSetSize' in cls or 'Counters' in cls:
+        elif 'ControlVars' in cls or 'Counters' in cls or 'Counters' in cls:
             # ControlVars-3
             c, num = cls.split('-')
             num = int(num)
@@ -275,7 +275,10 @@ def lpt(c):
         return 100.
 
 def average(s):
-    return sum(s) * 1.0 / len(s)
+    try:
+        return sum(s) * 1.0 / len(s)
+    except ZeroDivisionError:
+        return 0
 
 def stdev(s):
     avg = average(s)
@@ -383,20 +386,7 @@ printh("Semi-simple Loops", "Multiple exits, where SOME take the simple form.\n"
 printresult("Semi-simple Loops ⊆ Multi Exit", ('MultiExit', 'MultiExitSimple'), crosssum=False)
 printresult("Semi-simple Loops vs. Non-semi-simple (overview)", ('MultiExitNonSimple', 'MultiExitSimple'))
 printresult("Semi-simple Loops vs. Non-semi-simple (class details)", ('MultiExitNonSimple', 'MultiExitIntegerIter', 'MultiExitDataIter', 'MultiExitAArrayIter', 'MultiExitPArrayIter'))
-distribution("Semi-simple Loop Unique Increments [= triples (counter-var, bound, delta) ]", 'MultiExitIncrSetSize', class_list=CLASS_LIST2)
 distribution("Semi-simple Loop Counter Variables", 'MultiExitCounters', class_list=CLASS_LIST2)
-# distribution("MultiExitIntegerIter Increment Variables", 'MultiExitIntegerIterIncrSetSize')
-# distribution("MultiExitDataIter Increment Variables", 'MultiExitDataIterIncrSetSize')
-# distribution("MultiExitAArrayIter Increment Variables", 'MultiExitAArrayIterIncrSetSize')
-# distribution("MultiExitPArrayIter Increment Variables", 'MultiExitPArrayIterIncrSetSize')
-
-printh("Weak Semi-simple Loops", "Multiple exits, where SOME take the simple form (NOT CONSIDERING condition).\n")
-
-# printresult("Semi-simple Loops ⊆ Multi Exit", ('MultiExit', 'MultiExitNoCondSimple'), crosssum=False)
-# printresult("Semi-simple Loops vs. Non-semi-simple (overview)", ('MultiExitNoCondNonSimple', 'MultiExitNoCondSimple'))
-# printresult("Semi-simple Loops vs. Non-semi-simple (class details)", ('MultiExitNoCondNonSimple', 'MultiExitNoCondIntegerIter', 'MultiExitNoCondDataIter', 'MultiExitNoCondAArrayIter', 'MultiExitNoCondPArrayIter'))
-# distribution("MultiExitNoCond Unique Increments [= triples (counter-var, bound, delta) ]", 'MultiExitNoCondIncrSetSize', class_list=CLASS_LIST2)
-# distribution("MultiExitNoCond Counter Variables", 'MultiExitNoCondCounters', class_list=CLASS_LIST2)
 
 printh("Influencing/-ed loops")
 

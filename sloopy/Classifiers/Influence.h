@@ -109,10 +109,10 @@ class BaseAmortizedTypeAClassifier : public LoopClassifier {
 };
 
 typedef STR_HOLDER("AmortA1") Str_AmortA1;
-typedef BaseAmortizedTypeAClassifier<MultiExitIncrSetSizeClassifier, Str_AmortA1> AmortizedTypeAClassifier;
+typedef BaseAmortizedTypeAClassifier<MultiExitClassifier, Str_AmortA1> AmortizedTypeAClassifier;
 
 typedef STR_HOLDER("WeakAmortA1") Str_WeakAmortA1;
-typedef BaseAmortizedTypeAClassifier<MultiExitNoCondIncrSetSizeClassifier, Str_WeakAmortA1> WeakAmortizedTypeAClassifier;
+typedef BaseAmortizedTypeAClassifier<MultiExitNoCondClassifier, Str_WeakAmortA1> WeakAmortizedTypeAClassifier;
 
 class AmortizedTypeA2Classifier : public LoopClassifier {
   bool IsCurrentBlock (const NaturalLoopBlock *Block) {
@@ -123,7 +123,7 @@ class AmortizedTypeA2Classifier : public LoopClassifier {
     void classify(const ASTContext* Context, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) {
       if (Loop == OutermostNestingLoop) return;
 
-      const MultiExitIncrSetSizeClassifier AFLC(Context);
+      const MultiExitClassifier AFLC(Context);
       auto IncrementSet = AFLC.classify(Loop);
       if (!IncrementSet.size()) return;
 
@@ -174,7 +174,7 @@ class AmortizedTypeBClassifier : public LoopClassifier {
     void classify(const ASTContext* Context, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) {
       if (Loop == OutermostNestingLoop) return;
 
-      const MultiExitIncrSetSizeClassifier AFLC(Context);
+      const MultiExitClassifier AFLC(Context);
       auto IncrementSet = AFLC.classify(Loop);
       if (!IncrementSet.size()) return;
 

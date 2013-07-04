@@ -2,6 +2,19 @@
 
 #include "IncrementClassifier.h"
 
+class ExitClassifier : public LoopClassifier {
+  public:
+    void classify(const NaturalLoop* Loop) const {
+      unsigned PredSize = Loop->getExit().pred_size();
+      if (PredSize == 1) {
+        LoopClassifier::classify(Loop, "SingleExit");
+      } else {
+        LoopClassifier::classify(Loop, "NonSingleExit");
+      }
+      LoopClassifier::classify(Loop, "MultiExit");
+    }
+};
+
 class BranchingClassifier : public LoopClassifier {
   const std::string SliceType;
   public:

@@ -30,21 +30,6 @@ class BaseMultiExitNoCondClassifier : public BaseMultiExitClassifier<BaseClassif
     BaseMultiExitNoCondClassifier(const ASTContext *Context) : BaseMultiExitClassifier<BaseClassifier, Marker>(Context) {}
 };
 
-template <class MultiExitClassifier, typename Marker>
-class BaseMultiExitIncrSetSizeClassifier : public LoopClassifier {
-  public:
-  std::set<IncrementLoopInfo> classify(const ASTContext* Context, const NaturalLoop *Loop) {
-    const MultiExitClassifier AFLC(Context);
-    auto IncrementSet = AFLC.classify(Loop);
-
-    std::stringstream sstm;
-    sstm << IncrementSet.size();
-
-    LoopClassifier::classify(Loop, Success, Marker::asString(), sstm.str());
-    return IncrementSet;
-  }
-};
-
 #define STR_HOLDER(str) struct { static std::string asString() { return str; } }
 
 #define STR(name) \
@@ -53,10 +38,6 @@ class BaseMultiExitIncrSetSizeClassifier : public LoopClassifier {
   typedef STR_HOLDER(#name) Str_##name; \
   typedef STR_HOLDER("MultiExit"#name) Str_MultiExit##name; \
   typedef STR_HOLDER("MultiExitNoCond"#name) Str_MultiExitNoCond##name; \
-  typedef STR_HOLDER("MultiExit"#name"IncrSetSize") Str_MultiExit##name##IncrSetSize; \
-  typedef STR_HOLDER("MultiExitNoCond"#name"IncrSetSize") Str_MultiExitNoCond##name##IncrSetSize; \
   typedef BaseSingleExitClassifier<Base##name##Classifier, Str_##name> name##Classifier; \
   typedef BaseMultiExitClassifier<Base##name##Classifier, Str_MultiExit##name> MultiExit##name##Classifier; \
   typedef BaseMultiExitNoCondClassifier<Base##name##Classifier, Str_MultiExitNoCond##name> MultiExitNoCond##name##Classifier; \
-  typedef BaseMultiExitIncrSetSizeClassifier<MultiExit##name##Classifier, Str_MultiExit##name##IncrSetSize> MultiExit##name##IncrSetSizeClassifier; \
-  typedef BaseMultiExitIncrSetSizeClassifier<MultiExitNoCond##name##Classifier, Str_MultiExitNoCond##name##IncrSetSize> MultiExitNoCond##name##IncrSetSizeClassifier;
