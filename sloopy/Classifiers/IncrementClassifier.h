@@ -406,11 +406,13 @@ class IncrementClassifier : public LoopClassifier {
 
             PseudoConstantSet.clear();
             DefUseHelper CondDUH(Cond);
+            if (Cond) {
             for (auto VD : CondDUH.getDefsAndUses()) {
               if (VD == I.VD) continue;
               std::string name = I.VD == Bound.Var ? "N" : (I.VD == I.Delta.Var ? "D" : "X");
               /* std::string name = I.VD == Bound.Var ? "N" : (I.VD == I.Delta ? "D" : VD->getNameAsString()); */
               addPseudoConstantVar(name, VD);
+            }
             }
             checkPseudoConstantSet(Loop);
 

@@ -40,6 +40,7 @@ llvm::cl::opt<bool> DumpBlocks("dump-blocks");
 llvm::cl::opt<bool> DumpIncrementVars("dump-increment-vars");
 llvm::cl::opt<bool> DumpControlVars("dump-control-vars");
 llvm::cl::opt<bool> DumpControlVarsDetail("dump-control-vars-detail");
+llvm::cl::opt<std::string> HasClass("has-class");
 llvm::cl::opt<bool> DumpClasses("dump-classes");
 llvm::cl::opt<bool> DumpClassesAll("dump-classes-all");
 llvm::cl::opt<bool> DumpAST("dump-ast");
@@ -422,15 +423,23 @@ void classify(
   }
 
   // Influence
-  InnerInfluencesOuterClassifier IIOC;
-  IIOC.classify(ProperlyNestedLoops, SlicedOuterLoop);
 
   AmortizedTypeA2Classifier ATA2C;
   ATA2C.classify(Context, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
   AmortizedTypeAClassifier ATAC;
   ATAC.classify(Context, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
+  {
+    /* Make sure to pass Unsliced!!!
+     * MultiExitNoCond classifier needs the Unsliced CFG to find all increments!
+     */
+    WeakAmortizedTypeAClassifier C;
+    C.classify(Context, Unsliced, OutermostNestingLoop, NestingLoops);
+  }
   AmortizedTypeBClassifier ATBC;
   ATBC.classify(Context, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
+
+  InnerInfluencesOuterClassifier IIOC;
+  IIOC.classify(ProperlyNestedLoops, SlicedOuterLoop);
 
   // Simple control flow
   SimpleLoopCounter SLC;
@@ -579,9 +588,6 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         auto LocationPair = Unsliced->getLoopStmtLocation(Result.SourceManager);
         PresumedLoc PL = LocationPair.first;
         if (isSpecified(D, PL)) {
-          if (!LoopStats) {
-            llvm::errs() << LoopLocationMap[Unsliced] << "\n";
-          }
           if (DumpControlVars) {
             for (auto VD : Unsliced->getControlVars()) {
               llvm::errs() << "Control variable: " << VD->getNameAsString() << " (" << VD->getType().getAsString() << ")\n";
@@ -634,8 +640,22 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         }
 
         classify(isSpecified(D, PL), Unsliced, SlicedAllLoops, SlicedOuterLoop, OutermostNestingLoop, NestingLoops, ProperlyNestedLoops, Result.Context);
+      }
+
+      // InfluencesOuter is only classified when we reach the outer loop,
+      // so we have to loop once again to show all classes.
+      for (auto &MLD : LoopsAfterMerging) {
+        const NaturalLoop *Unsliced = M[MLD][0];
+        auto LocationPair = Unsliced->getLoopStmtLocation(Result.SourceManager);
+        PresumedLoc PL = LocationPair.first;
 
         if (isSpecified(D, PL)) {
+          if (HasClass == std::string() && !LoopStats) {
+            llvm::errs() << LoopLocationMap[Unsliced] << "\n";
+          }
+          if (HasClass != std::string() && LoopClassifier::hasClass(Unsliced, HasClass)) {
+            llvm::errs() << LoopLocationMap[Unsliced] << "\n";
+          }
           if (DumpClasses || DumpClassesAll) {
             for (auto Class : Classifications[Unsliced]) {
               if (DumpClassesAll || (Class.find("!") == std::string::npos && Class.find("?") == std::string::npos)) {

@@ -223,7 +223,10 @@ def search_backedge_match(lookup_filename, func, line, linebe, term, bound):
 
     return False
 
+
 def parse_loopus():
+    unmatched = 0
+
     for l in lf:
         term, bound, line, linebe, func, filepath = l.split()
         line = int(line)
@@ -243,15 +246,12 @@ def parse_loopus():
 
         print >> sys.stderr, '!0', lookup_filename, func, line, linebe
 
-parse_sloopy()
-parse_loopus()
+        unmatched += 1
 
-print "==================================="
-print sys.argv[1]
-print "==================================="
-print
-print "generated", datetime.now()
-print
+    return unmatched
+
+parse_sloopy()
+unmatched = parse_loopus()
 
 def countif(type, r, y):
     return sum([1 if r[0] <= depth and depth < r[1] else 0 for depth in branch[type][y[0]][y[1]]])
@@ -262,8 +262,17 @@ def countall(type, r):
 def sumall(c):
     return sum([ results[y[0]][y[1]][c] for y in ('YY', 'YN', 'NN') ])
 
-def percent(c):
-    return 100. * results['Y']['Y'][c] / sumall(c)
+def lpb(c):
+    try:
+        return 100. * results['Y']['Y'][c] / sumall(c)
+    except ZeroDivisionError:
+        return 100.
+
+def lpt(c):
+    try:
+        return 100. * (results['Y']['Y'][c] + results['Y']['N'][c]) / sumall(c)
+    except ZeroDivisionError:
+        return 100.
 
 def average(s):
     return sum(s) * 1.0 / len(s)
@@ -292,19 +301,20 @@ def printresult(desc, key, crosssum=True):
 
     longest_key = max([len(x) for x in key])
 
-    print ''.ljust(longest_key), "\t| YY\t| YN\t| NN\t║ LP\t| Σ"
+    print ''.ljust(longest_key), "\t| YY\t| YN\t| NN\t║ LPB\t| LPT\t| Σ"
     for x in key:
         print x.ljust(longest_key), "\t|",
         for y in ('YY', 'YN', 'NN'):
             print "%2d\t%s" % (results[y[0]][y[1]][x], '║' if y == 'NN' else '|'),
-        print "%.1f\t|" % percent(x),
+        print "%.1f\t|" % lpb(x),
+        print "%.1f\t|" % lpt(x),
         if crosssum or x == key[0]:
             print sumall(x)
         else:
             print sumall(x), "/", sumall(key[0]), "(= %.1f%%)" % (100.*sumall(x)/sumall(key[0]))
     if crosssum:
         if len(key) > 1:
-            print ''.ljust(longest_key), "\t\t\t\t\t ", sum([sumall(x) for x in key]), "(TOTAL)"
+            print ''.ljust(longest_key), "\t\t\t\t\t\t ", sum([sumall(x) for x in key]), "(TOTAL)"
     print
 
 CLASS_LIST = [(0, 1), (1, 2), (2, 3), (3, 10), (10, sys.maxint)]
@@ -314,7 +324,7 @@ def distribution(desc, type, subtype=('',), class_list=CLASS_LIST):
     print desc
     print "-" * len (desc)
     for x in subtype:
-        print "\t\t| YY\t| YN\t| NN\t║ LP\t| Σ"
+        print "\t\t| YY\t| YN\t| NN\t║ LPB\t| LPT\t| Σ"
         print "avg(%s)\t|" % (x if x else 'count'),
         for y in ('YY', 'YN', 'NN'):
             l = branch[type+x][y[0]][y[1]]
@@ -335,20 +345,32 @@ def distribution(desc, type, subtype=('',), class_list=CLASS_LIST):
                 print "%d\t%s" % (s, '║' if y == 'NN' else '|'),
             try:
                 print "%.1f\t|" % (100.*countif(type+x, r, 'YY')/countall(type+x, r)),
+                print "%.1f\t|" % (100.*(countif(type+x, r, 'YY') + countif(type+x, r, 'YN'))/countall(type+x, r)),
             except ZeroDivisionError:
                 print "%.1f\t|" % (100.),
+                print "%.1f\t|" % (100.),
             print countall(type+x, r)
-        print "\t\t\t\t\t\t ", sum([countall(type+x, r) for r in class_list]), "(TOTAL)"
+        print "\t\t\t\t\t\t\t ", sum([countall(type+x, r) for r in class_list]), "(TOTAL)"
         print
 
-printresult("Single Exit vs. Multi Exit", ('MultiExit', 'SingleExit'), crosssum=False)
+print "==================================="
+print sys.argv[1]
+print "==================================="
+print
+print "generated", datetime.now()
+print "unmatched loos:", unmatched
+print
+print "LPT ... Loopus Performance Termination [ (YY+YN)/(YY+YN+NN) ]"
+print "LPB ... Loopus Performance Bound [ YY/(YY+YN+NN) ]"
+print
+
+printresult("Single Exit vs. Multi Exit", ('MultiExit', 'SingleExit', 'NonSingleExit'), crosssum=False)
 
 printh("(Single Exit) Simple Loops", "Single exit that takes the simple form.\n")
 
 printresult("Simple Loops ⊆ Single Exit", ('SingleExit', SIMPLE, 'SingleExitNonSimple'), crosssum=False)
 printresult("Simple Loop vs. Non-Simple (= non-simple single exit, or multi exit) (overview)", (UNCLASS, SIMPLE))
 printresult("Simple Loop vs. Non-Simple (= non-simple single exit, or multi exit) (class details)", (UNCLASS,) + SIMPLE_DETAILS)
-print "LP ... Loopus Performance, % of loops in the resp. class for which Loopus computes a bound.\n"
 
 
 printh("(Multi Exit) Simple Loops", "Multiple exits, where ALL take the simple form.\n")
@@ -361,23 +383,31 @@ printh("Semi-simple Loops", "Multiple exits, where SOME take the simple form.\n"
 printresult("Semi-simple Loops ⊆ Multi Exit", ('MultiExit', 'MultiExitSimple'), crosssum=False)
 printresult("Semi-simple Loops vs. Non-semi-simple (overview)", ('MultiExitNonSimple', 'MultiExitSimple'))
 printresult("Semi-simple Loops vs. Non-semi-simple (class details)", ('MultiExitNonSimple', 'MultiExitIntegerIter', 'MultiExitDataIter', 'MultiExitAArrayIter', 'MultiExitPArrayIter'))
-distribution("MultiExit Unique Increments [= triples (counter-var, bound, delta) ]", 'MultiExitIncrSetSize', class_list=CLASS_LIST2)
-distribution("MultiExit Counter Variables", 'MultiExitCounters', class_list=CLASS_LIST2)
+distribution("Semi-simple Loop Unique Increments [= triples (counter-var, bound, delta) ]", 'MultiExitIncrSetSize', class_list=CLASS_LIST2)
+distribution("Semi-simple Loop Counter Variables", 'MultiExitCounters', class_list=CLASS_LIST2)
 # distribution("MultiExitIntegerIter Increment Variables", 'MultiExitIntegerIterIncrSetSize')
 # distribution("MultiExitDataIter Increment Variables", 'MultiExitDataIterIncrSetSize')
 # distribution("MultiExitAArrayIter Increment Variables", 'MultiExitAArrayIterIncrSetSize')
 # distribution("MultiExitPArrayIter Increment Variables", 'MultiExitPArrayIterIncrSetSize')
 
+printh("Weak Semi-simple Loops", "Multiple exits, where SOME take the simple form (NOT CONSIDERING condition).\n")
+
+# printresult("Semi-simple Loops ⊆ Multi Exit", ('MultiExit', 'MultiExitNoCondSimple'), crosssum=False)
+# printresult("Semi-simple Loops vs. Non-semi-simple (overview)", ('MultiExitNoCondNonSimple', 'MultiExitNoCondSimple'))
+# printresult("Semi-simple Loops vs. Non-semi-simple (class details)", ('MultiExitNoCondNonSimple', 'MultiExitNoCondIntegerIter', 'MultiExitNoCondDataIter', 'MultiExitNoCondAArrayIter', 'MultiExitNoCondPArrayIter'))
+# distribution("MultiExitNoCond Unique Increments [= triples (counter-var, bound, delta) ]", 'MultiExitNoCondIncrSetSize', class_list=CLASS_LIST2)
+# distribution("MultiExitNoCond Counter Variables", 'MultiExitNoCondCounters', class_list=CLASS_LIST2)
 
 printh("Influencing/-ed loops")
 
-printresult("Outer loop influenced by inner (inner remains in slice)", 'InfluencedByInner')
-printresult("Inner loop influences outer (inner remains in slice)", 'InfluencesOuter')
+printresult("Outer loop influenced by inner (inner remains in slice)", ('InfluencedByInner', 'StronglyInfluencedByInner'), crosssum=False)
+printresult("Inner loop influences outer (inner remains in slice)", ('InfluencesOuter', 'StronglyInfluencesOuter'), crosssum=False)
 
 
 printh("Amortized Loops")
 
 printresult("Amortized A1 (inner loop counter incremented)", ('AmortA1', 'AmortA1InnerEqOuter'), crosssum=False)
+printresult("Weak Amortized A1 (inner loop counter incremented)", ('WeakAmortA1', 'WeakAmortA1InnerEqOuter'), crosssum=False)
 printresult("Amortized A2 (inner loop counter never defined)", ('AmortA2', 'AmortA2InnerEqOuter'), crosssum=False)
 printresult("Amortized B (inner bound is increment-delta of outer)", 'AmortB')
 

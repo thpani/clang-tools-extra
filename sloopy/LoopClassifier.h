@@ -147,16 +147,30 @@ static bool isIntegerVariable(const Expr *Expression) {
 // Suffix := Str | Str _ Suffix
 class LoopClassifier {
   public:
-    void classify(const NaturalLoop* Loop) const {
+    static void classify(const NaturalLoop* Loop) {
       Classifications[Loop->getUnsliced()].insert(Loop->getLoopStmtMarker());
     }
-    void classify(const NaturalLoop* Loop, const std::string Reason) const {
+    static void classify(const NaturalLoop* Loop, const std::string Reason) {
       std::string S = Loop->getLoopStmtMarker() + "@" + Reason;
       Classifications[Loop->getUnsliced()].insert(S);
     }
-    void classify(const NaturalLoop* Loop, const ClassificationKind Kind, const std::string Marker, const std::string Suffix="") const {
+    static void classify(const NaturalLoop* Loop, const ClassificationKind Kind, const std::string Marker, const std::string Suffix="") {
       std::string S = Loop->getLoopStmtMarker() + "@" + reasonToString(Kind, Marker, Suffix);
       Classifications[Loop->getUnsliced()].insert(S);
+    }
+    static bool hasClass(const NaturalLoop* Loop, const std::string WhichClass) {
+      auto Classes = Classifications[Loop->getUnsliced()];
+      for (auto Class : Classes) {
+        size_t pos = Class.find("@");
+        if (pos == std::string::npos) continue;
+
+        std::string NormalizedClass = Class.substr(pos+1, std::string::npos);
+        if (NormalizedClass == WhichClass) {
+          return true;
+        }
+      }
+
+      return false;
     }
 };
 
@@ -173,6 +187,8 @@ class SimpleLoopCounter : public LoopClassifier {
       unsigned PredSize = Loop->getExit().pred_size();
       if (PredSize == 1) {
         LoopClassifier::classify(Loop, "SingleExit");
+      } else {
+        LoopClassifier::classify(Loop, "NonSingleExit");
       }
       LoopClassifier::classify(Loop, "MultiExit");
     }

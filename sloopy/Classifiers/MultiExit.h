@@ -70,3 +70,12 @@ typedef BaseIncrSetSizeClassifier<
   MultiExitDataIterIncrSetSizeClassifier,
   Str_MultiExit>
   MultiExitIncrSetSizeClassifier;
+
+typedef STR_HOLDER("MultiExitNoCond") Str_MultiExitNoCond;
+typedef BaseIncrSetSizeClassifier<
+  MultiExitNoCondIntegerIterIncrSetSizeClassifier,
+  MultiExitNoCondAArrayIterIncrSetSizeClassifier,
+  MultiExitNoCondPArrayIterIncrSetSizeClassifier,
+  MultiExitNoCondDataIterIncrSetSizeClassifier,
+  Str_MultiExitNoCond>
+  MultiExitNoCondIncrSetSizeClassifier;
