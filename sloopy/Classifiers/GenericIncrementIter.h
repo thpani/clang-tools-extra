@@ -24,7 +24,7 @@ template<class BaseClassifier, typename Marker>
 class BaseMultiExitNoCondClassifier : public BaseMultiExitClassifier<BaseClassifier, Marker> {
   protected:
     virtual std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo I) const throw (checkerror) {
-      return std::make_pair("", VarDeclIntPair::create());
+      return std::make_pair("", VarDeclIntPair());
     }
   public:
     BaseMultiExitNoCondClassifier(const ASTContext *Context) : BaseMultiExitClassifier<BaseClassifier, Marker>(Context) {}

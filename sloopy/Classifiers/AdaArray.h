@@ -20,13 +20,13 @@ class BaseAArrayIterClassifier : public IncrementClassifier {
       }
 
       const Expr *CondInner = Cond->IgnoreParenCasts();
-      VarDeclIntPair Bound;
+      const VarDeclIntPair *Bound = NULL;
       if (const ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(CondInner)) {
         auto A = getArrayVariables(ASE);
         if (A.second != Increment.VD) {
           throw checkerror(Unknown, Marker, "Cond_LoopVar_NotIn_ArraySubscript");
         }
-        Bound = { A.first, llvm::APInt() };
+        Bound = new VarDeclIntPair(A.first);
       }
       else if (const BinaryOperator *ConditionOp = dyn_cast<BinaryOperator>(CondInner)) {
         BinaryOperatorKind Opc = ConditionOp->getOpcode();
@@ -59,12 +59,12 @@ class BaseAArrayIterClassifier : public IncrementClassifier {
           else if (LHSBase != NULL && LHSIdx == Increment.VD && isIntegerConstant(ConditionOp->getRHS(), Context)) {
             // LHS is loop var, RHS is bound
             LoopVarLHS = true;
-            Bound = { NULL, getIntegerConstant(ConditionOp->getRHS(), Context) };
+            Bound = new VarDeclIntPair(getIntegerConstant(ConditionOp->getRHS(), Context));
           }
           else if (RHSBase != NULL && RHSIdx == Increment.VD && isIntegerConstant(ConditionOp->getLHS(), Context)) {
             // RHS is loop var, LHS is bound
             LoopVarLHS = false;
-            Bound = { NULL, getIntegerConstant(ConditionOp->getLHS(), Context) };
+            Bound = new VarDeclIntPair(getIntegerConstant(ConditionOp->getLHS(), Context));
           }
           else if (LHSBase != NULL && LHSIdx == Increment.VD && isVariable(ConditionOp->getRHS())) {
             // LHS is loop var, RHS is var bound
@@ -93,18 +93,18 @@ class BaseAArrayIterClassifier : public IncrementClassifier {
           else if (LHSBase != NULL && LHSIdx == Increment.VD) {
             LoopVarLHS = true;
             Suffix = "ComplexBound";
-            Bound = { NULL, llvm::APInt() };
+            Bound = new VarDeclIntPair();
           }
           else if (RHSBase != NULL && RHSIdx == Increment.VD) {
             LoopVarLHS = false;
             Suffix = "ComplexBound";
-            Bound = { NULL, llvm::APInt() };
+            Bound = new VarDeclIntPair();
           }
           else {
             throw checkerror(Fail, Marker, "Cond_BinOp_TooComplex");
           }
           BoundVar = LoopVarLHS ? RHSBase : LHSBase; // null if integer-literal, sizeof, ...
-          if (BoundVar) Bound = { BoundVar, llvm::APInt() };
+          if (BoundVar) Bound = new VarDeclIntPair(BoundVar);
         }
         else {
           throw checkerror(Unknown, Marker, "Cond_BinOp_OpNotSupported");
@@ -114,7 +114,10 @@ class BaseAArrayIterClassifier : public IncrementClassifier {
         throw checkerror(Unknown, Marker, "Cond_OpNotSupported");
       }
 
-      return std::pair<std::string, VarDeclIntPair>(Suffix, Bound);
+      assert(Bound);
+      const VarDeclIntPair BoundReturn(*Bound);
+      delete Bound;
+      return std::pair<std::string, VarDeclIntPair>(Suffix, BoundReturn);
     }
 
   public:

@@ -27,12 +27,12 @@ class BaseDataIterClassifier : public IncrementClassifier {
       if (Base != IncVar) {
         throw checkerror(Fail, Marker, "Inc_RHSBaseNeqInc");
       }
-      return { IncVar, BO, { NULL, llvm::APInt() } };
+      return { IncVar, BO, VarDeclIntPair() };
     }
 
     std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
       // TODO
-      return std::pair<std::string, VarDeclIntPair>(std::string(), { NULL, llvm::APInt() });
+      return std::make_pair(std::string(), VarDeclIntPair());
     }
 
   public:
