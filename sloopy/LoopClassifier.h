@@ -46,7 +46,8 @@ class checkerror {
 class LoopClassifier {
   public:
     static void classify(const NaturalLoop* Loop, const ClassificationKind Kind, const std::string Marker, const int Count) {
-      std::stringstream sstm(Count);
+      std::stringstream sstm;
+      sstm << Count;
       classify(Loop, Kind, Marker, sstm.str());
     }
     static void classify(const NaturalLoop* Loop, const ClassificationKind Kind, const std::string Marker, const std::string Suffix="") {
@@ -55,7 +56,8 @@ class LoopClassifier {
     }
     /* overloads for success */
     static void classify(const NaturalLoop* Loop, const std::string Marker, const int Count) {
-      std::stringstream sstm(Count);
+      std::stringstream sstm;
+      sstm << Count;
       classify(Loop, Marker, sstm.str());
     }
     static void classify(const NaturalLoop* Loop, const std::string Marker, const std::string Suffix="") {
