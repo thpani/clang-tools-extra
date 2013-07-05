@@ -2,6 +2,7 @@
 
 #include "LoopClassifier.h"
 #include "Increment/ADT.h"
+#include "Increment/Helpers.h"
 #include "Increment/Inc.h"
 #include "Increment/Cond.h"
 
@@ -73,7 +74,7 @@ class IncrementClassifier : public LoopClassifier {
 
     std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop) const {
       LoopVariableFinder Finder(this);
-      auto LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
+      const std::set<IncrementInfo> LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
 
       if (LoopVarCandidates.size() == 0) {
         LoopClassifier::classify(Loop, Fail, Marker, "NoLoopVarCandidate");
@@ -123,9 +124,7 @@ class IncrementClassifier : public LoopClassifier {
         for (auto ILI : successes) {
           Counters.insert(ILI.VD);
         }
-        std::stringstream sstm;
-        sstm << Counters.size();
-        LoopClassifier::classify(Loop, Success, Marker+"Counters", sstm.str());
+        LoopClassifier::classify(Loop, Success, Marker+"Counters", Counters.size());
 
         // TODO concat unique suffixes
         LoopClassifier::classify(Loop, Success, Marker, suffixes[0]);

@@ -20,6 +20,10 @@ static std::string classificationKindToString(const ClassificationKind Kind) {
   return std::string(Kind == Fail ? "!" : (Kind == Unknown ? "?" : ""));
 }
 
+static std::string reasonToString(const std::string Marker, const std::string Suffix) {
+  return Marker + (Suffix.size() > 0 ? "-" : "") + Suffix;
+}
+
 static std::string reasonToString(const ClassificationKind Kind, const std::string Marker, const std::string Suffix) {
   return classificationKindToString(Kind) + Marker + (Suffix.size() > 0 ? "-" : "") + Suffix;
 }
@@ -36,128 +40,29 @@ class checkerror {
     const std::string reason;
 };
 
-typedef bool (*TypePredicate)(const VarDecl *);
-static bool isIntegerType(const VarDecl *VD) {
-  return VD->getType()->isIntegerType();
-}
-static bool isPointerType(const VarDecl *VD) {
-  return VD->getType()->isPointerType();
-}
-static bool isIntegerConstant(const Expr *Expression, const ASTContext *Context) {
-  llvm::APSInt Result;
-  if (Expression->EvaluateAsInt(Result, const_cast<ASTContext&>(*Context))) {
-    return true;
-  }
-  return false;
-}
-
-static llvm::APInt getIntegerConstant(const Expr *Expression, const ASTContext *Context) {
-  llvm::APSInt Result;
-  if (Expression->EvaluateAsInt(Result, const_cast<ASTContext&>(*Context))) {
-    return Result;
-  }
-  llvm_unreachable("no integer constant");
-}
-
-static const VarDecl *getVariable(const Expr *Expression) {
-  if (Expression==NULL) return NULL;
-  const Expr *AdjustedExpr = Expression->IgnoreParenCasts();
-  if (const DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(AdjustedExpr)) {
-    if (const VarDecl *Var = dyn_cast<VarDecl>(DRE->getDecl())) {
-      return Var;
-    }
-  }
-  return NULL;
-}
-
-static const VarDecl *getTypeVariable(const Expr *Expression, const TypePredicate TypePredicate) {
-  const VarDecl *Var = getVariable(Expression);
-  if (Var != NULL && TypePredicate(Var)) {
-    return Var;
-  }
-  return NULL;
-}
-
-static const VarDecl *getIntegerVariable(const Expr *Expression) {
-  return getTypeVariable(Expression, &isIntegerType);
-}
-
-static const std::pair<const VarDecl*, const VarDecl*> getArrayVariables(const Expr *Expression) {
-  if (const ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(Expression->IgnoreParenCasts())) {
-    const VarDecl *Base = getVariable(ASE->getBase());
-    if (const VarDecl *Idx = getIntegerVariable(ASE->getIdx())) {
-      return std::pair<const VarDecl*, const VarDecl*>(Base, Idx);
-    }
-  }
-  return std::pair<const VarDecl*, const VarDecl*>(NULL, NULL);
-}
-
-static bool isVariable(const Expr *Expression) {
-  return getVariable(Expression) != NULL;
-}
-static bool isIntegerVariable(const Expr *Expression) {
-  return getIntegerVariable(Expression) != NULL;
-}
-
-/* static const VarDecl *getField(const Expr *Expression) { */
-/*   if (Expression==NULL) return NULL; */
-/*   if (const ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(Expression->IgnoreParenCasts())) { */
-/*     const Expr *Base = ASE->getBase()->IgnoreParenCasts(); */
-/*     if (const VarDecl *VD = getVariable(Base)) { */
-/*       if (VD->getType()->isArrayType()) { */
-/*           if (VD->getType()->castAsArrayTypeUnsafe()->getElementType()->isIntegerType()) { */
-/*             return VD; */
-/*           } */
-/*       } */
-/*       else { */
-/*         // TODO */
-/*         assert(VD->getType()->isPointerType()); */
-/*       } */
-/*     } */
-/*     if (const MemberExpr *ME = dyn_cast<MemberExpr>(Base->IgnoreParenCasts())) { */
-/*       if (const FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl())) { */
-/*         if (FD->getType()->isArrayType()) { */
-/*           /1* if (FD->getType()->castAsArrayTypeUnsafe()->getElementType()->isIntegerType()) { *1/ */
-/*             return FD; */
-/*           /1* } *1/ */
-/*         } */
-/*         else { */
-/*           // TODO */
-/*           assert(FD->getType()->isPointerType()); */
-/*         } */
-/*       } */
-/*     } */
-/*   } */
-/*   /1* if (const VarDecl *VD = getIntegerVariable(Expression)) { *1/ */
-/*   if (const VarDecl *VD = getVariable(Expression)) { */
-/*     return VD; */
-/*   } */
-/*   if (const MemberExpr *ME = dyn_cast<MemberExpr>(Expression->IgnoreParenCasts())) { */
-/*     // TODO */
-/*     if (const FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl())) { */
-/*       /1* if (FD->getType()->isIntegerType()) { *1/ */
-/*         return FD; */
-/*       /1* } *1/ */
-/*     } */
-/*   } */
-/*   return NULL; */
-/* } */
 
 // Classifier := Stmt [!?@] {ADA,Array,...} - Suffix
 // Suffix := Str | Str _ Suffix
 class LoopClassifier {
   public:
-    static void classify(const NaturalLoop* Loop) {
-      Classifications[Loop->getUnsliced()].insert(Loop->getLoopStmtMarker());
-    }
-    static void classify(const NaturalLoop* Loop, const std::string Reason) {
-      std::string S = Loop->getLoopStmtMarker() + "@" + Reason;
-      Classifications[Loop->getUnsliced()].insert(S);
+    static void classify(const NaturalLoop* Loop, const ClassificationKind Kind, const std::string Marker, const int Count) {
+      std::stringstream sstm(Count);
+      classify(Loop, Kind, Marker, sstm.str());
     }
     static void classify(const NaturalLoop* Loop, const ClassificationKind Kind, const std::string Marker, const std::string Suffix="") {
       std::string S = Loop->getLoopStmtMarker() + "@" + reasonToString(Kind, Marker, Suffix);
       Classifications[Loop->getUnsliced()].insert(S);
     }
+    /* overloads for success */
+    static void classify(const NaturalLoop* Loop, const std::string Marker, const int Count) {
+      std::stringstream sstm(Count);
+      classify(Loop, Marker, sstm.str());
+    }
+    static void classify(const NaturalLoop* Loop, const std::string Marker, const std::string Suffix="") {
+      std::string S = Loop->getLoopStmtMarker() + "@" + reasonToString(Marker, Suffix);
+      Classifications[Loop->getUnsliced()].insert(S);
+    }
+
     static bool hasClass(const NaturalLoop* Loop, const std::string WhichClass) {
       auto Classes = Classifications[Loop->getUnsliced()];
       for (auto Class : Classes) {
@@ -174,9 +79,10 @@ class LoopClassifier {
     }
 };
 
-class AnyLoopCounter {
+class AnyLoopCounter : public LoopClassifier {
   public:
     void classify(const NaturalLoop* Loop) const {
       Classifications[Loop->getUnsliced()].insert("ANY");
+      Classifications[Loop->getUnsliced()].insert(Loop->getLoopStmtMarker());
     }
 };

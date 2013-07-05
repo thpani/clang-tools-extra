@@ -66,11 +66,11 @@ class BaseAArrayIterClassifier : public IncrementClassifier {
             LoopVarLHS = false;
             Bound = new VarDeclIntPair(getIntegerConstant(ConditionOp->getLHS(), Context));
           }
-          else if (LHSBase != NULL && LHSIdx == Increment.VD && isVariable(ConditionOp->getRHS())) {
+          else if (LHSBase != NULL && LHSIdx == Increment.VD && getVariable(ConditionOp->getRHS())) {
             // LHS is loop var, RHS is var bound
             LoopVarLHS = true;
           }
-          else if (RHSBase != NULL && RHSIdx == Increment.VD && isVariable(ConditionOp->getLHS())) {
+          else if (RHSBase != NULL && RHSIdx == Increment.VD && getVariable(ConditionOp->getLHS())) {
             // RHS is loop var, LHS is var bound
             LoopVarLHS = false;
           }

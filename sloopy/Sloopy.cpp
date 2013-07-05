@@ -67,7 +67,7 @@ int main(int argc, const char **argv) {
 
       myfile << LoopLocationMap[Loop] << " ";
 
-      int negClasses = 0;
+      unsigned negClasses = 0;
       for (auto Class : ClassList) {
         Counter[Class]++;
         size_t pos = Class.find("@");

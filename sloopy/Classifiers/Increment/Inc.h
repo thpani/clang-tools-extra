@@ -29,11 +29,12 @@ static IncrementInfo getIncrementInfo(const Expr *Expr, const std::string Marker
               if (RLHS == VD && isIntegerConstant(RHS->getRHS(), Context)) {
                 return { VD, BOP, VarDeclIntPair(getIntegerConstant(RHS->getRHS(), Context)) };
               }
-              if (RRHS == VD && isIntegerVariable(RHS->getLHS())) {
-                return { VD, BOP, VarDeclIntPair(getIntegerVariable(RHS->getLHS())) };
+              const VarDecl *Increment;
+              if (RRHS == VD && (Increment = getIntegerVariable(RHS->getLHS()))) {
+                return { VD, BOP, Increment };
               }
-              if (RLHS == VD && isIntegerVariable(RHS->getRHS())) {
-                return { VD, BOP, VarDeclIntPair(getIntegerVariable(RHS->getRHS())) };
+              if (RLHS == VD && (Increment = getIntegerVariable(RHS->getRHS()))) {
+                return { VD, BOP, Increment };
               }
             }
           }

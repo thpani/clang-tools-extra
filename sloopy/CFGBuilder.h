@@ -365,10 +365,6 @@ void classify(
   AnyLoopCounter ALC;
   ALC.classify(SlicedAllLoops);
 
-  // Statements
-  LoopClassifier LoopCounter;
-  LoopCounter.classify(SlicedAllLoops);
-
   // Branching
   BranchingClassifier B("AllLoops");
   B.classify(SlicedAllLoops);
