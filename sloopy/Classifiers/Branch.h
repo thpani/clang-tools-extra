@@ -6,6 +6,7 @@ class ExitClassifier : public LoopClassifier {
   public:
     void classify(const NaturalLoop* Loop) const {
       unsigned PredSize = Loop->getExit().pred_size();
+      LoopClassifier::classify(Loop, Success, "Exits", PredSize);
       if (PredSize == 1) {
         LoopClassifier::classify(Loop, "SingleExit");
       } else {
