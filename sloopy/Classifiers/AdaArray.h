@@ -35,12 +35,14 @@ class BaseAArrayIterClassifier : public IncrementClassifier {
 
           // see if LHS/RHS is array var
           bool LoopVarLHS;
-          auto LHS = getArrayVariables(ConditionOp->getLHS());
-          auto RHS = getArrayVariables(ConditionOp->getRHS());
-          const VarDecl *LHSBase = LHS.first;
-          const VarDecl *LHSIdx = LHS.second;
-          const VarDecl *RHSBase = RHS.first;
-          const VarDecl *RHSIdx = RHS.second;
+          auto LHS = ConditionOp->getLHS();
+          auto RHS = ConditionOp->getRHS();
+          auto LHSVar = getArrayVariables(LHS);
+          auto RHSVar = getArrayVariables(RHS);
+          const VarDecl *LHSBase = LHSVar.first;
+          const VarDecl *LHSIdx = LHSVar.second;
+          const VarDecl *RHSBase = RHSVar.first;
+          const VarDecl *RHSIdx = RHSVar.second;
 
           /* determine which is loop var, which is bound */
           if (LHSBase != NULL && RHSBase != NULL) {
@@ -56,39 +58,41 @@ class BaseAArrayIterClassifier : public IncrementClassifier {
               throw checkerror(Unknown, Marker, "Cond_LoopVar_NotIn_ArraySubscript");
             }
           }
-          else if (LHSBase != NULL && LHSIdx == Increment.VD && isIntegerConstant(ConditionOp->getRHS(), Context)) {
+          else if (LHSBase != NULL && LHSIdx == Increment.VD && isIntegerConstant(RHS, Context)) {
             // LHS is loop var, RHS is bound
             LoopVarLHS = true;
-            Bound = new VarDeclIntPair(getIntegerConstant(ConditionOp->getRHS(), Context));
+            Bound = new VarDeclIntPair(getIntegerConstant(RHS, Context));
           }
-          else if (RHSBase != NULL && RHSIdx == Increment.VD && isIntegerConstant(ConditionOp->getLHS(), Context)) {
+          else if (RHSBase != NULL && RHSIdx == Increment.VD && isIntegerConstant(LHS, Context)) {
             // RHS is loop var, LHS is bound
             LoopVarLHS = false;
-            Bound = new VarDeclIntPair(getIntegerConstant(ConditionOp->getLHS(), Context));
+            Bound = new VarDeclIntPair(getIntegerConstant(LHS, Context));
           }
-          else if (LHSBase != NULL && LHSIdx == Increment.VD && getVariable(ConditionOp->getRHS())) {
+          else if (LHSBase != NULL && LHSIdx == Increment.VD && getVariable(RHS)) {
             // LHS is loop var, RHS is var bound
             LoopVarLHS = true;
+            Bound = new VarDeclIntPair(getVariable(RHS));
           }
-          else if (RHSBase != NULL && RHSIdx == Increment.VD && getVariable(ConditionOp->getLHS())) {
+          else if (RHSBase != NULL && RHSIdx == Increment.VD && getVariable(LHS)) {
             // RHS is loop var, LHS is var bound
             LoopVarLHS = false;
+            Bound = new VarDeclIntPair(getVariable(LHS));
           }
-          else if (LHSBase != NULL && LHSIdx == Increment.VD && dyn_cast<UnaryExprOrTypeTraitExpr>(ConditionOp->getRHS()->IgnoreParenCasts())) {
+          else if (LHSBase != NULL && LHSIdx == Increment.VD && isa<UnaryExprOrTypeTraitExpr>(RHS->IgnoreParenCasts())) {
             // LHS is loop var, RHS is sizeof() bound
-            if (const UnaryExprOrTypeTraitExpr *B = dyn_cast<UnaryExprOrTypeTraitExpr>(ConditionOp->getRHS()->IgnoreParenCasts())) {
-              if (B->getKind() == UETT_SizeOf) {
-                LoopVarLHS = true;
-              }
+            const UnaryExprOrTypeTraitExpr *B = dyn_cast<UnaryExprOrTypeTraitExpr>(RHS->IgnoreParenCasts());
+            if (B->getKind() != UETT_SizeOf) {
+              LoopVarLHS = true;
             }
+            Bound = new VarDeclIntPair();
           }
-          else if (RHSBase != NULL && RHSIdx == Increment.VD && dyn_cast<UnaryExprOrTypeTraitExpr>(ConditionOp->getLHS()->IgnoreParenCasts())) {
+          else if (RHSBase != NULL && RHSIdx == Increment.VD && isa<UnaryExprOrTypeTraitExpr>(LHS->IgnoreParenCasts())) {
             // RHS is loop var, LHS is sizeof() bound
-            if (const UnaryExprOrTypeTraitExpr *B = dyn_cast<UnaryExprOrTypeTraitExpr>(ConditionOp->getLHS()->IgnoreParenCasts())) {
-              if (B->getKind() == UETT_SizeOf) {
-                LoopVarLHS = false;
-              }
+            const UnaryExprOrTypeTraitExpr *B = dyn_cast<UnaryExprOrTypeTraitExpr>(LHS->IgnoreParenCasts());
+            if (B->getKind() != UETT_SizeOf) {
+              LoopVarLHS = false;
             }
+            Bound = new VarDeclIntPair();
           }
           else if (LHSBase != NULL && LHSIdx == Increment.VD) {
             LoopVarLHS = true;
