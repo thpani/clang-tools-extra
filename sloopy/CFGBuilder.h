@@ -1,7 +1,7 @@
 #pragma once
 
 #include <sys/types.h> /* pid_t */
-#include <unistd.h>  /* _exit, fork */
+#include <unistd.h>    /* _exit, fork */
 
 #include <stack>
 
@@ -14,40 +14,12 @@
 #include "Loop.h"
 #include "LoopMatchers.h"
 #include "DefUse.h"
-#include "Classifiers/GenericIncrementIter.h"
-#include "Classifiers/Ada.h"
-#include "Classifiers/AdaArray.h"
-#include "Classifiers/Branch.h"
-#include "Classifiers/DataIter.h"
-#include "Classifiers/ArrayIter.h"
-#include "Classifiers/Influence.h"
-#include "Classifiers/MultiExit.h"
-/* #include "Classifiers/EmptyBody.h" */
-/* #include "Classifiers/Cond.h" */
+#include "Classifier.h"
 
 using namespace clang;
 using namespace clang::ast_matchers;
 
 using namespace sloopy;
-
-llvm::cl::opt<bool> LoopStats("loop-stats");
-llvm::cl::opt<bool> IgnoreInfiniteLoops("ignore-infinite-loops");
-llvm::cl::opt<bool> ViewSliced("view-sliced");
-llvm::cl::opt<bool> ViewSlicedOuter("view-sliced-outer");
-llvm::cl::opt<bool> ViewUnsliced("view-unsliced");
-llvm::cl::opt<bool> ViewCFG("view-cfg");
-llvm::cl::opt<bool> DumpBlocks("dump-blocks");
-llvm::cl::opt<bool> DumpIncrementVars("dump-increment-vars");
-llvm::cl::opt<bool> DumpControlVars("dump-control-vars");
-llvm::cl::opt<bool> DumpControlVarsDetail("dump-control-vars-detail");
-llvm::cl::opt<std::string> HasClass("has-class");
-llvm::cl::opt<bool> DumpClasses("dump-classes");
-llvm::cl::opt<bool> DumpClassesAll("dump-classes-all");
-llvm::cl::opt<bool> DumpAST("dump-ast");
-llvm::cl::opt<bool> DumpStmt("dump-stmt");
-llvm::cl::opt<std::string> Function("func");
-llvm::cl::opt<std::string> File("file");
-llvm::cl::opt<unsigned> Line("line");
 
 std::map<const NaturalLoop*, std::string> LoopLocationMap;
 
@@ -352,102 +324,19 @@ static SlicingCriterion slicingCriterionAllLoops(const MergedLoopDescriptor &Loo
   return { ControlVars, ExitingBlocks };
 }
 
-void classify(
-    const bool isSpecified,
-    const NaturalLoop *Unsliced,
-    const NaturalLoop *SlicedAllLoops,
-    const NaturalLoop *SlicedOuterLoop,
-    const NaturalLoop *OutermostNestingLoop,
-    const std::vector<const NaturalLoop*> NestingLoops,
-    const std::vector<const NaturalLoop*> ProperlyNestedLoops,
-    const ASTContext *Context) {
-  // Any
-  AnyLoopCounter ALC;
-  ALC.classify(SlicedAllLoops);
-
-  // Branching
-  BranchingClassifier B("AllLoops");
-  B.classify(SlicedAllLoops);
-  BranchingClassifier B2("OuterLoop");
-  B2.classify(SlicedOuterLoop);
-
-  // ControlVars
-  ControlVarClassifier CVC("AllLoops");
-  CVC.classify(SlicedAllLoops);
-  ControlVarClassifier CVC2("OuterLoop");
-  CVC2.classify(SlicedOuterLoop);
-
-  // Simple Plans
-  DataIterClassifier DIC(Context);
-  DIC.classify(SlicedOuterLoop);
-  AArrayIterClassifier AA(Context);
-  auto I = AA.classify(SlicedOuterLoop);
-  if (!I.size()) {
-    IntegerIterClassifier A(Context);
-    auto Increments = A.classify(SlicedOuterLoop);
-  }
-  PArrayIterClassifier Ar(Context);
-  Ar.classify(SlicedOuterLoop);
-
-  // Test
-  {
-    MultiExitClassifier C(Context);
-    auto IMEAC = C.classify(SlicedAllLoops);
-    if (isSpecified && DumpIncrementVars) {
-      for (auto I : IMEAC) {
-        llvm::errs() << "(incr: " << I.VD->getNameAsString() << ", ";
-        llvm::errs() << "bound: ";
-        if (I.Bound.Var) {
-          llvm::errs() << I.Bound.Var->getNameAsString();
-        } else {
-          llvm::errs() << I.Bound.Int.getSExtValue();
-        }
-        llvm::errs() << ", ";
-        llvm::errs() << "delta: ";
-        if (I.Delta.Var) {
-          llvm::errs() << I.Delta.Var->getNameAsString();
-        } else {
-          llvm::errs() << I.Delta.Int.getSExtValue();
-        }
-        llvm::errs() << ")\n";
-      }
-    }
-  }
-  {
-    MultiExitNoCondIntegerIterClassifier C(Context);
-    C.classify(Unsliced);
-  }
-
-  // Influence
-
-  AmortizedTypeA2Classifier ATA2C;
-  ATA2C.classify(Context, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
-  AmortizedTypeAClassifier ATAC;
-  ATAC.classify(Context, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
-  {
-    /* Make sure to pass Unsliced!!!
-     * MultiExitNoCond classifier needs the Unsliced CFG to find all increments!
-     */
-    WeakAmortizedTypeAClassifier C;
-    C.classify(Context, Unsliced, OutermostNestingLoop, NestingLoops);
-  }
-  AmortizedTypeBClassifier ATBC;
-  ATBC.classify(Context, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
-
-  InnerInfluencesOuterClassifier IIOC;
-  IIOC.classify(ProperlyNestedLoops, SlicedOuterLoop);
-
-  // Simple control flow
-  ExitClassifier SLC;
-  SLC.classify(SlicedAllLoops);
-}
-
 bool isOutermostNestingLoop(const MergedLoopDescriptor *D) {
   return D->NestingLoops.size() == 1;
 }
 
 class FunctionCallback : public MatchFinder::MatchCallback {
+  private:
+    const ASTContext *Context;
+    const Classifier *C;
   public:
+    FunctionCallback() : Context(NULL) {}
+    ~FunctionCallback() {
+      delete C;
+    }
     virtual void run(const MatchFinder::MatchResult &Result) {
       const FunctionDecl *D = Result.Nodes.getNodeAs<FunctionDecl>(FunctionName);
       if (!D->hasBody()) return;
@@ -576,6 +465,11 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         M[Loop].push_back(SlicedOuterLoop);
       }
 
+      if (this->Context != Result.Context) {
+        llvm::errs() << "New ASTContext.\n";
+        this->Context = Result.Context;
+        this->C = new Classifier(Result.Context);
+      }
       for (auto &MLD : LoopsAfterMerging) {
         const NaturalLoop *Unsliced = M[MLD][0];
         const NaturalLoop *SlicedAllLoops = M[MLD][1];
@@ -635,7 +529,7 @@ class FunctionCallback : public MatchFinder::MatchCallback {
           ProperlyNestedLoops.push_back(M[**I][1]);
         }
 
-        classify(isSpecified(D, PL), Unsliced, SlicedAllLoops, SlicedOuterLoop, OutermostNestingLoop, NestingLoops, ProperlyNestedLoops, Result.Context);
+        C->classify(isSpecified(D, PL), Unsliced, SlicedAllLoops, SlicedOuterLoop, OutermostNestingLoop, NestingLoops, ProperlyNestedLoops);
       }
 
       // InfluencesOuter is only classified when we reach the outer loop,
@@ -646,19 +540,17 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         PresumedLoc PL = LocationPair.first;
 
         if (isSpecified(D, PL)) {
-          if (HasClass == std::string() && !LoopStats) {
+          if ((HasClass == std::string() && !LoopStats) ||
+              (HasClass != std::string() && LoopClassifier::hasClass(Unsliced, HasClass))) {
             llvm::errs() << LoopLocationMap[Unsliced] << "\n";
-          }
-          if (HasClass != std::string() && LoopClassifier::hasClass(Unsliced, HasClass)) {
-            llvm::errs() << LoopLocationMap[Unsliced] << "\n";
-          }
-          if (DumpClasses || DumpClassesAll) {
-            for (auto Class : Classifications[Unsliced]) {
-              if (DumpClassesAll || (Class.find("!") == std::string::npos && Class.find("?") == std::string::npos)) {
-                llvm::errs() << Class << " ";
+            if (DumpClasses || DumpClassesAll) {
+              for (auto Class : Classifications[Unsliced]) {
+                if (DumpClassesAll || (Class.find("!") == std::string::npos && Class.find("?") == std::string::npos)) {
+                  llvm::errs() << Class << " ";
+                }
               }
+              llvm::errs() << "\n";
             }
-            llvm::errs() << "\n";
           }
           if (DumpBlocks || DumpControlVars || DumpControlVarsDetail || DumpClasses || DumpClassesAll || DumpAST || DumpStmt || DumpIncrementVars) {
             llvm::errs() << "----------\n";

@@ -38,20 +38,7 @@ results = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
 # distribution results (list of ints)
 branch = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
 
-UNCLASS = 'NotSingleExitSimple'
-SIMPLE = 'SingleExitSimple'
-SIMPLE_DETAILS = ('IntegerIter', 'DataIter', 'AArrayIter', 'PArrayIter')
-
-def isSimple(cls):
-    for simpleClass in SIMPLE_DETAILS:
-        if '@'+simpleClass in cls:
-            return True
-    return False
-def simplify(clsses):
-    for cls in clsses:
-        if isSimple(cls):
-            return SIMPLE
-    return UNCLASS
+INCR_DETAILS = ('IntegerIter', 'DataIter', 'AArrayIter', 'PArrayIter')
 
 def parse_sloopy():
     for line in sf:
@@ -75,22 +62,21 @@ def parse_sloopy():
 def classify(sc, term, bound):
     # process classes
     for cls in sc:
-        if 'Branch' in cls:
+        suffix = None
+        if '-' in cls:
+            cls, suffix = cls.split('-', 1)
+        if cls.endswith('Branch'):
             # Branch-Depth-3-Nodes-6
-            c, _, depth, _, nodes = cls.split('-')
+            _, depth, _, nodes = suffix.split('-')
             depth, nodes = (int(depth), int(nodes))
-            branch[c.split('@')[1]+'depth'][term][bound].append(depth)
-            branch[c.split('@')[1]+'nodes'][term][bound].append(nodes)
-        elif 'ControlVars' in cls or 'Counters' in cls or 'Counters' in cls:
+            branch[cls+'depth'][term][bound].append(depth)
+            branch[cls+'nodes'][term][bound].append(nodes)
+        elif cls.endswith('ControlVars') or cls.endswith('Counters') or cls.endswith('Exits'):
             # ControlVars-3
-            c, num = cls.split('-')
-            num = int(num)
-            branch[c.split('@')[1]][term][bound].append(num)
-        elif '@' in cls:
-            results[term][bound][cls.split('@')[1].split('-')[0]] += 1
-            if simplify(sc) == UNCLASS and 'SingleExit' == cls.split('@')[1]:
-                results[term][bound]['SingleExitNonSimple'] += 1
-    results[term][bound][simplify(sc)] += 1
+            num = int(suffix)
+            branch[cls][term][bound].append(num)
+        else:
+            results[term][bound][cls] += 1
 
 HEADER_RANGE = 0
 BACKEDGE_RANGE = 8
@@ -314,7 +300,13 @@ def printresult(desc, key, crosssum=True):
         if crosssum or x == key[0]:
             print sumall(x)
         else:
-            print sumall(x), "/", sumall(key[0]), "(= %.1f%%)" % (100.*sumall(x)/sumall(key[0]))
+            p = 100
+            try:
+                p = (100.*sumall(x)/sumall(key[0]))
+            except ZeroDivisionError:
+                pass
+            print sumall(x), "/", sumall(key[0]), "(= %.1f%%)" % p
+
     if crosssum:
         if len(key) > 1:
             print ''.ljust(longest_key), "\t\t\t\t\t\t ", sum([sumall(x) for x in key]), "(TOTAL)"
@@ -338,6 +330,7 @@ def distribution(desc, type, subtype=('',), class_list=CLASS_LIST):
             l = branch[type+x][y[0]][y[1]]
             print "%.2f\t%s" % (stdev(l), '║' if y == 'NN' else '|'),
         print
+        total = sum([countall(type+x, r) for r in class_list])
         for r in class_list:
             if (r[1] - r[0]) == 1:
                 print "%s = %d \t|" % (x if x else 'cnt', r[0]),
@@ -352,8 +345,11 @@ def distribution(desc, type, subtype=('',), class_list=CLASS_LIST):
             except ZeroDivisionError:
                 print "%.1f\t|" % (100.),
                 print "%.1f\t|" % (100.),
-            print countall(type+x, r)
-        print "\t\t\t\t\t\t\t ", sum([countall(type+x, r) for r in class_list]), "(TOTAL)"
+            try:
+                print countall(type+x, r), "\t(%.1f%%)" % (100.*countall(type+x, r)/total)
+            except ZeroDivisionError:
+                print countall(type+x, r), "\t(%.1f%%)" % 100
+        print "\t\t\t\t\t\t\t ", total, "(TOTAL)"
         print
 
 print "==================================="
@@ -367,26 +363,32 @@ print "LPT ... Loopus Performance Termination [ (YY+YN)/(YY+YN+NN) ]"
 print "LPB ... Loopus Performance Bound [ YY/(YY+YN+NN) ]"
 print
 
-printresult("Single Exit vs. Multi Exit", ('MultiExit', 'SingleExit', 'NonSingleExit'), crosssum=False)
+printresult("Single Exit vs. Multi Exit", ('ANY', 'SingleExit', 'Not(SingleExit)'), crosssum=False)
+distribution("Exits", 'Exits')
 
 printh("(Single Exit) Simple Loops", "Single exit that takes the simple form.\n")
 
-printresult("Simple Loops ⊆ Single Exit", ('SingleExit', SIMPLE, 'SingleExitNonSimple'), crosssum=False)
-printresult("Simple Loop vs. Non-Simple (= non-simple single exit, or multi exit) (overview)", (UNCLASS, SIMPLE))
-printresult("Simple Loop vs. Non-Simple (= non-simple single exit, or multi exit) (class details)", (UNCLASS,) + SIMPLE_DETAILS)
+printresult("Simple Loops ⊆ Single Exit", ('SingleExit', 'SingleExit>NotSimple', 'SingleExit>Simple'), crosssum=False)
+printresult("Simple Loops (class details)", ('Not(SingleExit)', 'SingleExit>NotSimple') + tuple(('SingleExit>'+x for x in INCR_DETAILS)))
 
+printh("Strong (Single Exit) Simple Loops", "Single exit that takes the simple form AND exactly 1 increment on each path.\n")
 
-printh("(Multi Exit) Simple Loops", "Multiple exits, where ALL take the simple form.\n")
-
-print "Still TODO...\n"
-
+printresult("Strong Simple Loops ⊆ Single Exit", ('SingleExit', 'StrongSingleExit>NotSimple', 'StrongSingleExit>Simple'), crosssum=False)
+printresult("Strong Simple Loops ⊆ Simple Loops", ('SingleExit>Simple', 'StrongSingleExit>Simple'), crosssum=False)
+printresult("Strong Simple Loops (class details)", ('Not(SingleExit)', 'StrongSingleExit>NotSimple') + tuple(('StrongSingleExit>'+x for x in INCR_DETAILS)))
 
 printh("Semi-simple Loops", "Multiple exits, where SOME take the simple form.\n")
 
-printresult("Semi-simple Loops ⊆ Multi Exit", ('MultiExit', 'MultiExitSimple'), crosssum=False)
-printresult("Semi-simple Loops vs. Non-semi-simple (overview)", ('MultiExitNonSimple', 'MultiExitSimple'))
-printresult("Semi-simple Loops vs. Non-semi-simple (class details)", ('MultiExitNonSimple', 'MultiExitIntegerIter', 'MultiExitDataIter', 'MultiExitAArrayIter', 'MultiExitPArrayIter'))
-distribution("Semi-simple Loop Counter Variables", 'MultiExitCounters', class_list=CLASS_LIST2)
+printresult("Semi-simple Loops ⊆ Multi Exit", ('ANY', 'MultiExit>NotSimple', 'MultiExit>Simple'), crosssum=False)
+printresult("Semi-simple Loops (class details)", ('MultiExit>NotSimple',) +  tuple(('MultiExit>'+x for x in INCR_DETAILS)))
+distribution("Semi-simple Loop Counter Variables", 'MultiExit>Counters', class_list=CLASS_LIST2)
+
+printh("Strong Semi-simple Loops", "Multiple exits, where SOME take the simple form AND exactly 1 increment on each path.\n")
+
+printresult("Strong Semi-simple Loops ⊆ Multi Exit", ('ANY', 'StrongMultiExit>NotSimple', 'StrongMultiExit>Simple'), crosssum=False)
+printresult("Strong Semi-simple Loops ⊆ Semi-simple Loops", ('MultiExit>Simple', 'StrongMultiExit>Simple'), crosssum=False)
+printresult("Strong Semi-simple Loops (class details)", ('StrongMultiExit>NotSimple',) +  tuple(('StrongMultiExit>'+x for x in INCR_DETAILS)))
+distribution("Strong Semi-simple Loop Counter Variables", 'StrongMultiExit>Counters', class_list=CLASS_LIST2)
 
 printh("Influencing/-ed loops")
 

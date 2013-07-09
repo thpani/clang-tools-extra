@@ -33,6 +33,10 @@ class DefUseHelper : public ConstStmtVisitor<DefUseHelper> {
       RunAnalysis();
       return std::find(Defs.begin(), Defs.end(), VD) != Defs.end();
     }
+    unsigned countDefs(const VarDecl *VD) {
+      RunAnalysis();
+      return DefStmts[VD].size();
+    }
     bool isDefExclDecl(const VarDecl *VD) {
       auto I = DefStmts.find(VD);
       if (I != DefStmts.end()) {

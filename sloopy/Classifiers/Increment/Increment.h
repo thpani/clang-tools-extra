@@ -1,11 +1,77 @@
 #pragma once
 
+#include "Inc.h"
+#include "Cond.h"
 #include "IncrementClassifier.h"
 
-class BaseAArrayIterClassifier : public IncrementClassifier {
-  private:
-    const ASTContext *Context;
+class IntegerIterClassifier : public IncrementClassifier {
+  protected:
+    IncrementInfo getIncrementInfo(const Expr *Expr) const throw (checkerror) {
+      return ::getIncrementInfo(Expr, Marker, Context, &isIntegerType);
+    }
 
+    std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
+      return checkIncrementCond(Cond, Increment, &isIntegerType, Context, Marker);
+    }
+
+  public:
+    IntegerIterClassifier(const ASTContext *Context) : IncrementClassifier("IntegerIter", Context) {}
+};
+
+class PArrayIterClassifier : public IncrementClassifier {
+  protected:
+    IncrementInfo getIncrementInfo(const Expr *Expr) const throw (checkerror) {
+      return ::getIncrementInfo(Expr, Marker, Context, &isPointerType);
+    }
+
+    std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
+      return checkIncrementCond(Cond, Increment, &isPointerType, Context, Marker);
+    }
+
+  public:
+    PArrayIterClassifier(const ASTContext *Context) : IncrementClassifier("PArrayIter", Context) {}
+};
+
+class DataIterClassifier : public IncrementClassifier {
+  protected:
+    IncrementInfo getIncrementInfo(const Expr *Expr) const throw (checkerror) {
+      if (Expr == NULL) throw checkerror(Fail, Marker, "Inc_None");
+      const class Expr *Expression = Expr->IgnoreParenCasts();
+      const BinaryOperator *BO;
+      if (!(BO = dyn_cast<BinaryOperator>(Expression))) {
+        throw checkerror(Fail, Marker, "Inc_NotBinary");
+      }
+      const VarDecl *IncVar;
+      if (!(IncVar = getVariable(BO->getLHS()))) {
+        throw checkerror(Fail, Marker, "Inc_LHSNoVar");
+      }
+      if (!(*IncVar->getType()).isPointerType()) {
+        throw checkerror(Fail, Marker, "Inc_LHSNoPtr");
+      }
+      const MemberExpr *RHS;
+      if (!(RHS = dyn_cast<MemberExpr>(BO->getRHS()->IgnoreParenCasts()))) {
+        throw checkerror(Fail, Marker, "Inc_RHSNoMemberExpr");
+      }
+      const VarDecl *Base;
+      if (!(Base = getVariable(RHS->getBase()))) {
+        throw checkerror(Fail, Marker, "Inc_RHSBaseNoVar");
+      }
+      if (Base != IncVar) {
+        throw checkerror(Fail, Marker, "Inc_RHSBaseNeqInc");
+      }
+      return { IncVar, BO, VarDeclIntPair() };
+    }
+
+    std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
+      // TODO
+      return std::make_pair(std::string(), VarDeclIntPair());
+    }
+
+  public:
+    DataIterClassifier(const ASTContext *Context) : IncrementClassifier("DataIter", Context) {}
+};
+
+class AArrayIterClassifier : public IncrementClassifier {
   protected:
     IncrementInfo getIncrementInfo(const Expr *Expr) const throw (checkerror) {
       return ::getIncrementInfo(Expr, Marker, Context, &isIntegerType);
@@ -125,8 +191,6 @@ class BaseAArrayIterClassifier : public IncrementClassifier {
     }
 
   public:
-    BaseAArrayIterClassifier(const std::string Marker, const ASTContext* Context) : IncrementClassifier(Marker), Context(Context) {}
+    AArrayIterClassifier(const ASTContext *Context) : IncrementClassifier("AArrayIter", Context) {}
 
 };
-
-ITER_CLASSIFIERS(AArrayIter)

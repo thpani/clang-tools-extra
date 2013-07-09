@@ -1,14 +1,14 @@
 #pragma once
 
-#include "MultiExit.h"
+#include "Master.h"
 
 class InnerInfluencesOuterClassifier : public LoopClassifier {
-  bool IsCurrentHeaderBlock (const NaturalLoopBlock *Block) {
+  bool IsCurrentHeaderBlock (const NaturalLoopBlock *Block) const {
     return Block->getBlockID() == CurrentHeaderBlockID;
   }
-  unsigned CurrentHeaderBlockID;
+  mutable unsigned CurrentHeaderBlockID;
   public:
-    void classify(const std::vector<const NaturalLoop*> ProperlyNestedLoops, const NaturalLoop *Loop) {
+    void classify(const std::vector<const NaturalLoop*> ProperlyNestedLoops, const NaturalLoop *Loop) const {
       for (auto NestedLoop : ProperlyNestedLoops) {
         CurrentHeaderBlockID = (*NestedLoop->getEntry().succ_begin())->getBlockID();
         if (std::find_if(Loop->begin(), Loop->end(), std::bind(&InnerInfluencesOuterClassifier::IsCurrentHeaderBlock, this, std::placeholders::_1)) != Loop->end()) {
@@ -26,12 +26,14 @@ class InnerInfluencesOuterClassifier : public LoopClassifier {
 };
 
 
-template <class CounterClassifier, typename Marker>
-class BaseAmortizedTypeAClassifier : public LoopClassifier {
-  bool IsCurrentBlock (const NaturalLoopBlock *Block) {
+class AmortizedTypeAClassifier : public LoopClassifier {
+  const ASTContext *Context;
+  const std::string Marker;
+
+  bool IsCurrentBlock (const NaturalLoopBlock *Block) const {
     return Block->getBlockID() == CurrentBlockID;
   }
-  unsigned CurrentBlockID;
+  mutable unsigned CurrentBlockID;
 
   class SubExprVisitor : public RecursiveASTVisitor<SubExprVisitor> {
     public:
@@ -60,11 +62,13 @@ class BaseAmortizedTypeAClassifier : public LoopClassifier {
       const ASTContext *Context;
   };
   public:
-    void classify(const ASTContext* Context, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) {
+    AmortizedTypeAClassifier(const ASTContext* Context, const std::string Marker=std::string()) :
+      Context(Context),
+      Marker(Marker) {}
+    void classify(const MasterIncrementClassifier &MasterIncrementClassifier, const IncrementClassifierConstraint Constr, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) const {
       if (Loop == OutermostNestingLoop) return;
 
-      const CounterClassifier AFLC(Context);
-      auto IncrementSet = AFLC.classify(Loop);
+      auto IncrementSet = MasterIncrementClassifier.classify(Loop, Constr);
       if (!IncrementSet.size()) return;
 
       SubExprVisitor SEV(Context);
@@ -75,7 +79,7 @@ class BaseAmortizedTypeAClassifier : public LoopClassifier {
                                         I != E; I++) {
           const NaturalLoopBlock *Block = *I;
           CurrentBlockID = Block->getBlockID();
-          if (std::find_if(Loop->begin(), Loop->end(), std::bind(&BaseAmortizedTypeAClassifier::IsCurrentBlock, this, std::placeholders::_1)) != Loop->end()) {
+          if (std::find_if(Loop->begin(), Loop->end(), std::bind(&AmortizedTypeAClassifier::IsCurrentBlock, this, std::placeholders::_1)) != Loop->end()) {
             // block is in inner loop
             continue;
           }
@@ -90,15 +94,15 @@ class BaseAmortizedTypeAClassifier : public LoopClassifier {
                 // Inner.VD = Outer.VD sub-classifier
                 for (const NaturalLoop *NestingLoop : NestingLoops) {
                   if (NestingLoop == Loop) continue;
-                  auto OuterIncrementSet = AFLC.classify(NestingLoop);
+                  auto OuterIncrementSet = MasterIncrementClassifier.classify(NestingLoop, Constr);
                   for (auto OuterI : OuterIncrementSet) {
                     if (OuterI.VD == Increment.VD) {
-                      LoopClassifier::classify(Loop, Success, Marker::asString()+"InnerEqOuter");
+                      LoopClassifier::classify(Loop, Success, Marker+"AmortA1InnerEqOuter");
                     }
                   }
                 }
 
-                LoopClassifier::classify(Loop, Success, Marker::asString());
+                LoopClassifier::classify(Loop, Success, Marker+"AmortA1");
                 return;
               }
             } catch (checkerror) {}
@@ -108,23 +112,16 @@ class BaseAmortizedTypeAClassifier : public LoopClassifier {
     }
 };
 
-typedef STR_HOLDER("AmortA1") Str_AmortA1;
-typedef BaseAmortizedTypeAClassifier<MultiExitClassifier, Str_AmortA1> AmortizedTypeAClassifier;
-
-typedef STR_HOLDER("WeakAmortA1") Str_WeakAmortA1;
-typedef BaseAmortizedTypeAClassifier<MultiExitNoCondClassifier, Str_WeakAmortA1> WeakAmortizedTypeAClassifier;
-
 class AmortizedTypeA2Classifier : public LoopClassifier {
-  bool IsCurrentBlock (const NaturalLoopBlock *Block) {
+  bool IsCurrentBlock (const NaturalLoopBlock *Block) const {
     return Block->getBlockID() == CurrentBlockID;
   }
-  unsigned CurrentBlockID;
+  mutable unsigned CurrentBlockID;
   public:
-    void classify(const ASTContext* Context, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) {
+    void classify(const MasterIncrementClassifier &MasterIncrementClassifier, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) const {
       if (Loop == OutermostNestingLoop) return;
 
-      const MultiExitClassifier AFLC(Context);
-      auto IncrementSet = AFLC.classify(Loop);
+      auto IncrementSet = MasterIncrementClassifier.classify(Loop, MultiExit);
       if (!IncrementSet.size()) return;
 
       for (auto Increment : IncrementSet) {
@@ -150,7 +147,7 @@ class AmortizedTypeA2Classifier : public LoopClassifier {
         // Inner.VD = Outer.VD sub-classifier
         for (const NaturalLoop *NestingLoop : NestingLoops) {
           if (NestingLoop == Loop) continue;
-          auto OuterIncrementSet = AFLC.classify(NestingLoop);
+          auto OuterIncrementSet = MasterIncrementClassifier.classify(NestingLoop, MultiExit);
           for (auto OuterI : OuterIncrementSet) {
             if (OuterI.VD == Increment.VD) {
               LoopClassifier::classify(Loop, Success, "AmortA2InnerEqOuter");
@@ -166,22 +163,21 @@ outer_loop:
 };
 
 class AmortizedTypeBClassifier : public LoopClassifier {
-  bool IsCurrentBlock (const NaturalLoopBlock *Block) {
+  bool IsCurrentBlock (const NaturalLoopBlock *Block) const {
     return Block->getBlockID() == CurrentBlockID;
   }
-  unsigned CurrentBlockID;
+  mutable unsigned CurrentBlockID;
   public:
-    void classify(const ASTContext* Context, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) {
+    void classify(const MasterIncrementClassifier &MasterIncrementClassifier, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) const {
       if (Loop == OutermostNestingLoop) return;
 
-      const MultiExitClassifier AFLC(Context);
-      auto IncrementSet = AFLC.classify(Loop);
+      auto IncrementSet = MasterIncrementClassifier.classify(Loop, MultiExit);
       if (!IncrementSet.size()) return;
 
       for (auto Increment : IncrementSet) {
         for (const NaturalLoop* Outer : NestingLoops) {
           if (Outer == Loop) continue;
-          auto OuterIncrementSet = AFLC.classify(Outer);
+          auto OuterIncrementSet = MasterIncrementClassifier.classify(Outer, MultiExit);
           for (auto OuterIncrement : OuterIncrementSet) {
             if (OuterIncrement.Delta == Increment.Bound) {
               LoopClassifier::classify(Loop, Success, "AmortB");

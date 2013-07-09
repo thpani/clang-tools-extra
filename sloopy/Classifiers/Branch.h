@@ -1,18 +1,19 @@
 #pragma once
 
-#include "IncrementClassifier.h"
+#include "LoopClassifier.h"
 
 class ExitClassifier : public LoopClassifier {
   public:
     void classify(const NaturalLoop* Loop) const {
       unsigned PredSize = Loop->getExit().pred_size();
       LoopClassifier::classify(Loop, Success, "Exits", PredSize);
+
+      LoopClassifier::classify(Loop, "MultiExit");
       if (PredSize == 1) {
         LoopClassifier::classify(Loop, "SingleExit");
       } else {
-        LoopClassifier::classify(Loop, "NonSingleExit");
+        LoopClassifier::classify(Loop, "Not(SingleExit)");
       }
-      LoopClassifier::classify(Loop, "MultiExit");
     }
 };
 
@@ -20,7 +21,7 @@ class BranchingClassifier : public LoopClassifier {
   const std::string SliceType;
   public:
     BranchingClassifier(const std::string SliceType) : SliceType(SliceType) {}
-    void classify(const NaturalLoop *Loop) {
+    void classify(const NaturalLoop *Loop) const {
       std::set<const NaturalLoopBlock*> Visited;
       std::stack<const NaturalLoopBlock*> Worklist;
       std::stack<unsigned> Depths;
@@ -67,7 +68,7 @@ class ControlVarClassifier : public LoopClassifier {
   const std::string SliceType;
   public:
     ControlVarClassifier(const std::string SliceType) : SliceType(SliceType) {}
-    void classify(const NaturalLoop *Loop) {
+    void classify(const NaturalLoop *Loop) const {
       std::stringstream sstm;
       sstm << Loop->getControlVars().size();
 

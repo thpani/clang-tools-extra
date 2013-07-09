@@ -89,7 +89,7 @@ if [[ $2 == "run" ]] ; then
     elif [[ ${BENCH} == "wcet" ]] ; then
         FILES=$(find ${BENCH_DIR}/wcet/ -not -name des.c -and -name '*.c')
     elif [[ ${BENCH} == "cBench" ]] ; then
-        FILES=$(find ${BENCH_DIR}/cBenchPreprocessed/ -name '*.c')
+        FILES=$(find ${BENCH_DIR}/cBenchPreprocessed/$3 -name '*.c')
 
         # INCLUDES=$(find ${BENCH_DIR}/cBenchPreprocessed/ -name '*.c' | xargs -L1 dirname | sort | uniq | sed 's/^/-I/' | tr '\n' ' ')
         # # consumer_mad
@@ -262,38 +262,38 @@ EOF
     done
 }
 
-cat <<EOF >"${BENCH}.tex"
-\documentclass{article}
+# cat <<EOF >"${BENCH}.tex"
+# \documentclass{article}
 
-\usepackage[a4paper,landscape]{geometry}
-\usepackage{datetime}
-\usepackage{titlesec}
-\newcommand{\subsectionbreak}{\clearpage}
-\usepackage{pgf-pie}
-\usepackage{pgfplots}
-\usetikzlibrary{shadows}
+# \usepackage[a4paper,landscape]{geometry}
+# \usepackage{datetime}
+# \usepackage{titlesec}
+# \newcommand{\subsectionbreak}{\clearpage}
+# \usepackage{pgf-pie}
+# \usepackage{pgfplots}
+# \usetikzlibrary{shadows}
 
-\title{$BENCH}
+# \title{$BENCH}
 
-\begin{document}
-\date{Compiled on \today\ at \currenttime}
-\maketitle
+# \begin{document}
+# \date{Compiled on \today\ at \currenttime}
+# \maketitle
 
-$(gen_latex '' 'ALL (\texttt{for, while, do-while}) Statements')
-$(gen_latex 'FOR' '\texttt{for} Statements')
-$(gen_latex 'WHILE' '\texttt{while} Statements')
-$(gen_latex 'DO' '\texttt{do} Statements')
-$(gen_latex 'GOTO' '\texttt{goto} Statements')
+# $(gen_latex '' 'ALL (\texttt{for, while, do-while}) Statements')
+# $(gen_latex 'FOR' '\texttt{for} Statements')
+# $(gen_latex 'WHILE' '\texttt{while} Statements')
+# $(gen_latex 'DO' '\texttt{do} Statements')
+# $(gen_latex 'GOTO' '\texttt{goto} Statements')
 
-\section{Plain}
-\begin{verbatim}
-$(cat_bench '*')
-\end{verbatim}
+# \section{Plain}
+# \begin{verbatim}
+# $(cat_bench '*')
+# \end{verbatim}
 
-\end{document}
-EOF
-rm ${BENCH}.pdf
-pdflatex -interaction=nonstopmode "${BENCH}.tex" >/dev/null
-mv ${BENCH}.pdf ${BENCH}_${TIMESTAMP}.pdf
-ln -f ${BENCH}_${TIMESTAMP}.pdf ${BENCH}.pdf
-open "${BENCH}.pdf" #convert -density 600x600 texput.pdf -quality 90 -resize 800x600 pic.png && open pic.png
+# \end{document}
+# EOF
+# rm ${BENCH}.pdf
+# pdflatex -interaction=nonstopmode "${BENCH}.tex" >/dev/null
+# mv ${BENCH}.pdf ${BENCH}_${TIMESTAMP}.pdf
+# ln -f ${BENCH}_${TIMESTAMP}.pdf ${BENCH}.pdf
+# open "${BENCH}.pdf" #convert -density 600x600 texput.pdf -quality 90 -resize 800x600 pic.png && open pic.png

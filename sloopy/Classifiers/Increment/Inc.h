@@ -1,5 +1,8 @@
 #pragma once
 
+#include "ADT.h"
+#include "Helpers.h"
+
 static IncrementInfo getIncrementInfo(const Expr *Expr, const std::string Marker, const ASTContext *Context, const TypePredicate TypePredicate) throw(checkerror) {
   if (Expr == NULL) throw checkerror(Fail, Marker, "Inc_None");
   const class Expr *Expression = Expr->IgnoreParenCasts();

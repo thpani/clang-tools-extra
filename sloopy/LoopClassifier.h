@@ -41,8 +41,6 @@ class checkerror {
 };
 
 
-// Classifier := Stmt [!?@] {ADA,Array,...} - Suffix
-// Suffix := Str | Str _ Suffix
 class LoopClassifier {
   public:
     static void classify(const NaturalLoop* Loop, const ClassificationKind Kind, const std::string Marker, const int Count) {
@@ -51,7 +49,7 @@ class LoopClassifier {
       classify(Loop, Kind, Marker, sstm.str());
     }
     static void classify(const NaturalLoop* Loop, const ClassificationKind Kind, const std::string Marker, const std::string Suffix="") {
-      std::string S = Loop->getLoopStmtMarker() + "@" + reasonToString(Kind, Marker, Suffix);
+      std::string S = reasonToString(Kind, Marker, Suffix);
       Classifications[Loop->getUnsliced()].insert(S);
     }
     /* overloads for success */
@@ -61,22 +59,17 @@ class LoopClassifier {
       classify(Loop, Marker, sstm.str());
     }
     static void classify(const NaturalLoop* Loop, const std::string Marker, const std::string Suffix="") {
-      std::string S = Loop->getLoopStmtMarker() + "@" + reasonToString(Marker, Suffix);
+      std::string S = reasonToString(Marker, Suffix);
       Classifications[Loop->getUnsliced()].insert(S);
     }
 
     static bool hasClass(const NaturalLoop* Loop, const std::string WhichClass) {
       auto Classes = Classifications[Loop->getUnsliced()];
       for (auto Class : Classes) {
-        size_t pos = Class.find("@");
-        if (pos == std::string::npos) continue;
-
-        std::string NormalizedClass = Class.substr(pos+1, std::string::npos);
-        if (NormalizedClass == WhichClass) {
+        if (Class == WhichClass) {
           return true;
         }
       }
-
       return false;
     }
 };
@@ -85,6 +78,6 @@ class AnyLoopCounter : public LoopClassifier {
   public:
     void classify(const NaturalLoop* Loop) const {
       Classifications[Loop->getUnsliced()].insert("ANY");
-      Classifications[Loop->getUnsliced()].insert(Loop->getLoopStmtMarker());
+      LoopClassifier::classify(Loop, "Stmt", Loop->getLoopStmtMarker());
     }
 };
