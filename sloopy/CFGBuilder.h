@@ -331,12 +331,9 @@ bool isOutermostNestingLoop(const MergedLoopDescriptor *D) {
 class FunctionCallback : public MatchFinder::MatchCallback {
   private:
     const ASTContext *Context;
-    const Classifier *C;
+    const std::unique_ptr<Classifier> C;
   public:
     FunctionCallback() : Context(NULL) {}
-    ~FunctionCallback() {
-      delete C;
-    }
     virtual void run(const MatchFinder::MatchResult &Result) {
       const FunctionDecl *D = Result.Nodes.getNodeAs<FunctionDecl>(FunctionName);
       if (!D->hasBody()) return;
@@ -465,10 +462,10 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         M[Loop].push_back(SlicedOuterLoop);
       }
 
-      if (this->Context != Result.Context) {
-        llvm::errs() << "New ASTContext.\n";
-        this->Context = Result.Context;
-        this->C = new Classifier(Result.Context);
+      // the ast context doesn't change that often; cache it
+      if (Context != Result.Context) {
+        Context = Result.Context;
+        C.reset(new Classifier(Result.Context));
       }
       for (auto &MLD : LoopsAfterMerging) {
         const NaturalLoop *Unsliced = M[MLD][0];
