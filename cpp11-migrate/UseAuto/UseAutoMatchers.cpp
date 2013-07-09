@@ -7,11 +7,12 @@
 //
 //===----------------------------------------------------------------------===//
 ///
-///  \file
-///  \brief This file contains the implementation for matcher-generating
-///  functions and custom AST_MATCHERs.
+/// \file
+/// \brief This file contains the implementation for matcher-generating
+/// functions and custom AST_MATCHERs.
 ///
 //===----------------------------------------------------------------------===//
+
 #include "UseAutoMatchers.h"
 #include "clang/AST/ASTContext.h"
 
@@ -258,29 +259,29 @@ StatementMatcher makeIteratorDeclMatcher() {
   ).bind(IteratorDeclStmtId);
 }
 
-DeclarationMatcher makeDeclWithNewMatcher() {
-  return varDecl(
-           hasInitializer(
-             ignoringParenImpCasts(
-               newExpr().bind(NewExprId)
-             )
-           ),
+StatementMatcher makeDeclWithNewMatcher() {
+  return declStmt(
+    has(varDecl()),
+    unless(has(varDecl(
+      anyOf(
+        unless(hasInitializer(
+          ignoringParenImpCasts(newExpr())
+        )),
+        // FIXME: TypeLoc information is not reliable where CV qualifiers are
+        // concerned so these types can't be handled for now.
+        hasType(pointerType(pointee(hasCanonicalType(hasLocalQualifiers())))),
 
-           // FIXME: TypeLoc information is not reliable where CV qualifiers are
-           // concerned so these types can't be handled for now.
-           unless(hasType(pointerType(pointee(hasLocalQualifiers())))),
-
-           // FIXME: Handle function pointers. For now we ignore them because
-           // the replacement replaces the entire type specifier source range
-           // which includes the identifier.
-           unless(
-             hasType(
-               pointsTo(
-                 pointsTo(
-                   parenType(innerType(functionType()))
-                 )
-               )
-             )
-           )
-         ).bind(DeclWithNewId);
+        // FIXME: Handle function pointers. For now we ignore them because
+        // the replacement replaces the entire type specifier source range
+        // which includes the identifier.
+        hasType(
+          pointsTo(
+            pointsTo(
+              parenType(innerType(functionType()))
+            )
+          )
+        )
+      )
+    )))
+   ).bind(DeclWithNewId);
 }
