@@ -184,7 +184,8 @@ class IncrementClassifier : public LoopClassifier {
             Suffixes.insert(Suffix);
 
             // one is enough
-            goto next_exit;
+            /* goto next_exit; */
+            // we collect (increment, bound) pairs because AmortB needs the bound
           } catch(checkerror &e) {
             Reasons.insert(e.what());
           }
@@ -193,8 +194,8 @@ class IncrementClassifier : public LoopClassifier {
           LoopClassifier::classify(Loop, Fail, Constr.str(Marker), "NotAllWellformed");
         }
 
-next_exit:
-        ; /* no op */
+/* next_exit: */
+/*         ; /1* no op *1/ */
       }
 
       // We found well-formed increments
