@@ -331,7 +331,7 @@ bool isOutermostNestingLoop(const MergedLoopDescriptor *D) {
 class FunctionCallback : public MatchFinder::MatchCallback {
   private:
     const ASTContext *Context;
-    const std::unique_ptr<Classifier> C;
+    std::unique_ptr<Classifier> C;
   public:
     FunctionCallback() : Context(NULL) {}
     virtual void run(const MatchFinder::MatchResult &Result) {

@@ -777,28 +777,25 @@ void NaturalLoop::write(const LangOptions &LO) const {
   GraphHelper = &H;
 
   std::string ErrMsg;
-  char pathname[32];
-  strcpy(pathname, "./benchdot/NL_XXXXXX.dot");
+  char Pathname[32];
+  strcpy(Pathname, "./benchdot/NL_XXXXXX.dot");
   int TempFD;
-  if ((TempFD = mkstemps(pathname, 4)) == -1) {
-    llvm::errs() << pathname << ": can't make unique filename\n";
+  if ((TempFD = mkstemps(Pathname, 4)) == -1) {
+    llvm::errs() << Pathname << ": can't make unique filename\n";
     return;
   }
   close(TempFD);
   
-  llvm::sys::Path Filename = llvm::sys::Path(pathname);
-
-  llvm::errs() << "Writing '" << Filename.str() << "'... ";
+  llvm::errs() << "Writing '" << Pathname << "'... ";
 
   std::string ErrorInfo;
-  llvm::raw_fd_ostream O(Filename.c_str(), ErrorInfo);
+  llvm::raw_fd_ostream O(Pathname, ErrorInfo);
 
   if (ErrorInfo.empty()) {
     llvm::WriteGraph(O, G);
     llvm::errs() << " done. \n";
   } else {
-    llvm::errs() << "error opening file '" << Filename.str() << "' for writing!\n";
-    Filename.clear();
+    llvm::errs() << "error opening file '" << Pathname << "' for writing!\n";
   }
 
   GraphHelper = NULL;
