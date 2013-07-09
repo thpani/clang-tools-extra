@@ -89,23 +89,21 @@ class AmortizedTypeAClassifier : public LoopClassifier {
                                                 I != E; I++) {
             const Stmt *S = *I;
             // there is >= 1 increment of the inner loop's counter
-            try {
-              if (SEV.isVarIncremented(Increment.VD, S)) {
-                // Inner.VD = Outer.VD sub-classifier
-                for (const NaturalLoop *NestingLoop : NestingLoops) {
-                  if (NestingLoop == Loop) continue;
-                  auto OuterIncrementSet = MasterIncrementClassifier.classify(NestingLoop, Constr);
-                  for (auto OuterI : OuterIncrementSet) {
-                    if (OuterI.VD == Increment.VD) {
-                      LoopClassifier::classify(Loop, Success, Marker+"AmortA1InnerEqOuter");
-                    }
+            if (SEV.isVarIncremented(Increment.VD, S)) {
+              // Inner.VD = Outer.VD sub-classifier
+              for (const NaturalLoop *NestingLoop : NestingLoops) {
+                if (NestingLoop == Loop) continue;
+                auto OuterIncrementSet = MasterIncrementClassifier.classify(NestingLoop, Constr);
+                for (auto OuterI : OuterIncrementSet) {
+                  if (OuterI.VD == Increment.VD) {
+                    LoopClassifier::classify(Loop, Success, Marker+"AmortA1InnerEqOuter");
                   }
                 }
-
-                LoopClassifier::classify(Loop, Success, Marker+"AmortA1");
-                return;
               }
-            } catch (checkerror) {}
+
+              LoopClassifier::classify(Loop, Success, Marker+"AmortA1");
+              return;
+            }
           }
         }
       }
