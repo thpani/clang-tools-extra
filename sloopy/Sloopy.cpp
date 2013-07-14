@@ -1,6 +1,9 @@
 #include "iostream"
 #include "fstream"
 #include "algorithm"
+
+#include "boost/variant.hpp"
+
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Basic/SourceManager.h"
@@ -29,6 +32,7 @@ using namespace llvm;
 
 using namespace sloopy;
 
+
 int main(int argc, const char **argv) {
   llvm::sys::PrintStackTraceOnErrorSignal();
 
@@ -51,55 +55,11 @@ int main(int argc, const char **argv) {
   /* ----- Print stats ----- */
   if (LoopStats) {
     llvm::errs() << "Preparing statistics...\n";
-    /* std::cout.setf( std::ios::fixed, std:: ios::floatfield ); // floatfield set to fixed */
-    /* std::cout.precision(1); */
-    /* std::cout << "==============" << "\n"; */
-    /* std::cout << "= STATISTICS =\n"; */
-    /* std::cout << "==============" << "\n"; */
-    std::ofstream myfile;
-    myfile.open ("classifications_"+BenchName+".txt");
-    /* std::map<std::string, int> Counter; */
-    for (auto Classification : Classifications) {
-      auto Loop = Classification.first;
-      auto ClassList = Classification.second;
-
-      myfile << LoopLocationMap[Loop] << " ";
-
-      /* unsigned negClasses = 0; */
-      for (auto Class : ClassList) {
-        /* Counter[Class]++; */
-        /* size_t pos = Class.find("@"); */
-        /* if (pos != std::string::npos) { */
-        /*   Counter[Class.substr(pos+1, std::string::npos)]++; */
-        /* } */
-        /* if(Class.find("!") != std::string::npos || */
-        /*    Class.find("?") != std::string::npos || */
-        /*    Class.find("Cond-") != std::string::npos || */
-        /*    Class.find("Branch-") != std::string::npos || */
-        /*    Class.find("ControlVars-") != std::string::npos || */
-        /*    Class.find("SingleExit") != std::string::npos) { */
-        /*   negClasses++; */
-        /* } */
-        myfile << Class << " ";
-      }
-
-      myfile << "\n";
-
-      /* if (ClassList.size() < (unsigned long) 3+negClasses) { // ANY, TYPE */
-      /*   Counter["UNCLASSIFIED"]++; */
-      /* } */
-    }
-    myfile.close();
-    /* for (auto CounterItem : Counter) { */
-    /*   auto Class = CounterItem.first; */
-    /*   auto Count = CounterItem.second; */
-    /*   std::cout << Class << "\t" << Count; */
-    /*   std::cout << "\t" << (100.*Count/Counter["ANY"]) << "%"; */
-    /*   size_t pos = Class.find("@"); */
-    /*   const std::string family = pos != std::string::npos ? Class.substr(0, pos) : "ANY"; */
-    /*   std::cout << "\t" << (100.*Count/Counter[family]) << "%"; */
-    /*   std::cout << std::endl; */
-    /* } */
+    std::string Filename("classifications_"+BenchName+".txt");
+    std::string ErrorInfo;
+    raw_fd_ostream ostream(Filename.c_str(), ErrorInfo);
+    dumpClasses(ostream, OutputFormat::JSON);
+    ostream.close();
   }
 
   return 0;

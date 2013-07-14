@@ -45,7 +45,7 @@ class IncrementClassifier : public LoopClassifier {
           DefUseHelper A(Stmt);
           for (auto IncrementElement : PseudoConstantSet) {
             if (A.isDefExclDecl(IncrementElement.Var, IncrementElement.IncrementOp)) {
-              throw checkerror(Fail, Marker, IncrementElement.Name+"_ASSIGNED");
+              throw checkerror(IncrementElement.Name+"_ASSIGNED");
             }
           }
         }
@@ -104,9 +104,9 @@ class IncrementClassifier : public LoopClassifier {
 
       /* llvm::errs() << "Header " << In[Header] << "\n"; */
       if (In[Header] < 1)
-          throw checkerror(Fail, Marker, "ASSIGNED_NotAllPaths");
+          throw checkerror("ASSIGNED_NotAllPaths");
       if (In[Header] > 1)
-          throw checkerror(Fail, Marker, "ASSIGNED_Twice");
+          throw checkerror("ASSIGNED_Twice");
     }
 
   protected:
@@ -121,12 +121,12 @@ class IncrementClassifier : public LoopClassifier {
       LoopClassifier(), Marker(Marker), Context(Context) {}
     virtual ~IncrementClassifier() {}
 
-    std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const {
+    std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const throw () {
       // do we have the right # of exit arcs?
       unsigned PredSize = Loop->getExit().pred_size();
       assert(PredSize > 0);
       if (Constr.ECConstr != ANY_EXIT && PredSize != Constr.ECConstr) {
-        LoopClassifier::classify(Loop, Fail, Constr.str(Marker), "WrongExitArcs");
+        LoopClassifier::classify(Loop, Constr.str(), Marker, "WrongExitArcs", false);
         return std::set<IncrementLoopInfo>();
       }
 
@@ -134,7 +134,7 @@ class IncrementClassifier : public LoopClassifier {
       LoopVariableFinder Finder(this);
       const std::set<IncrementInfo> LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
       if (LoopVarCandidates.size() == 0) {
-        LoopClassifier::classify(Loop, Fail, Constr.str(Marker), "NoLoopVarCandidate");
+        LoopClassifier::classify(Loop, Constr.str(), Marker, "NoLoopVarCandidate", false);
         return std::set<IncrementLoopInfo>();
       }
 
@@ -191,7 +191,7 @@ class IncrementClassifier : public LoopClassifier {
           }
         }
         if (Constr.EWConstr == ALL_WELLFORMED && !WellformedIncrement) {
-          LoopClassifier::classify(Loop, Fail, Constr.str(Marker), "NotAllWellformed");
+          LoopClassifier::classify(Loop, Constr.str(), Marker, "NotAllWellformed", false);
         }
 
 /* next_exit: */
@@ -204,7 +204,8 @@ class IncrementClassifier : public LoopClassifier {
         for (auto ILI : WellformedIncrements) {
           Counters.insert(ILI.VD);
         }
-        LoopClassifier::classify(Loop, Success, Constr.str(Marker+"Counters"), Counters.size());
+        const unsigned CounterSetSize = Counters.size();
+        LoopClassifier::classify(Loop, Constr.str(), Marker+"Counters", CounterSetSize);
 
         std::stringstream Suffix;
         for (std::set<std::string>::const_iterator I = Suffixes.begin(),
@@ -213,7 +214,7 @@ class IncrementClassifier : public LoopClassifier {
           Suffix << *I;
           if (std::next(I) != E) Suffix << "-";
         }
-        LoopClassifier::classify(Loop, Success, Constr.str(Marker), Suffix.str());
+        LoopClassifier::classify(Loop, Constr.str(), Marker, Suffix.str());
         return WellformedIncrements;
       }
 
@@ -227,7 +228,7 @@ class IncrementClassifier : public LoopClassifier {
       }
       assert(Reason.str().size());
 
-      LoopClassifier::classify(Loop, Reason.str());
+      LoopClassifier::classify(Loop, Constr.str(), Marker, Reason.str(), false);
       return std::set<IncrementLoopInfo>();
     }
 };

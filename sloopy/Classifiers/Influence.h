@@ -14,11 +14,11 @@ class InnerInfluencesOuterClassifier : public LoopClassifier {
         if (std::find_if(Loop->begin(), Loop->end(), std::bind(&InnerInfluencesOuterClassifier::IsCurrentHeaderBlock, this, std::placeholders::_1)) != Loop->end()) {
           // if `Loop' has a block with the block id of the nested loop's header
           // => the nested loop influences the outer loop `Loop'
-          LoopClassifier::classify(Loop, Success, "InfluencedByInner");
-          LoopClassifier::classify(NestedLoop, Success, "InfluencesOuter");
+          LoopClassifier::classify(Loop, "InfluencedByInner");
+          LoopClassifier::classify(NestedLoop, "InfluencesOuter");
           if (LoopClassifier::hasClass(NestedLoop, "WeakAmortA1")) {
-          LoopClassifier::classify(Loop, Success, "StronglyInfluencedByInner");
-            LoopClassifier::classify(NestedLoop, Success, "StronglyInfluencesOuter");
+          LoopClassifier::classify(Loop, "StronglyInfluencedByInner");
+            LoopClassifier::classify(NestedLoop, "StronglyInfluencesOuter");
           }
         }
       }
@@ -96,12 +96,12 @@ class AmortizedTypeAClassifier : public LoopClassifier {
                 auto OuterIncrementSet = MasterIncrementClassifier.classify(NestingLoop, Constr);
                 for (auto OuterI : OuterIncrementSet) {
                   if (OuterI.VD == Increment.VD) {
-                    LoopClassifier::classify(Loop, Success, Marker+"AmortA1InnerEqOuter");
+                    LoopClassifier::classify(Loop, Marker+"AmortA1InnerEqOuter");
                   }
                 }
               }
 
-              LoopClassifier::classify(Loop, Success, Marker+"AmortA1");
+              LoopClassifier::classify(Loop, Marker+"AmortA1");
               return;
             }
           }
@@ -148,11 +148,11 @@ class AmortizedTypeA2Classifier : public LoopClassifier {
           auto OuterIncrementSet = MasterIncrementClassifier.classify(NestingLoop, MultiExit);
           for (auto OuterI : OuterIncrementSet) {
             if (OuterI.VD == Increment.VD) {
-              LoopClassifier::classify(Loop, Success, "AmortA2InnerEqOuter");
+              LoopClassifier::classify(Loop, "AmortA2InnerEqOuter");
             }
           }
         }
-        LoopClassifier::classify(Loop, Success, "AmortA2");
+        LoopClassifier::classify(Loop, "AmortA2");
         return;
 outer_loop:
         ; /* no op */
@@ -178,7 +178,7 @@ class AmortizedTypeBClassifier : public LoopClassifier {
           auto OuterIncrementSet = MasterIncrementClassifier.classify(Outer, MultiExit);
           for (auto OuterIncrement : OuterIncrementSet) {
             if (OuterIncrement.Delta == Increment.Bound) {
-              LoopClassifier::classify(Loop, Success, "AmortB");
+              LoopClassifier::classify(Loop, "AmortB");
               return;
             }
           }

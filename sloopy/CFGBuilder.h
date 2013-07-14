@@ -21,8 +21,6 @@ using namespace clang::ast_matchers;
 
 using namespace sloopy;
 
-std::map<const NaturalLoop*, std::string> LoopLocationMap;
-
 static bool isSpecified(const FunctionDecl *D, const PresumedLoc &PL) {
   return (Function.size() == 0 || D->getNameAsString() == Function) &&
          (File.size() == 0 || PL.getFilename() == File) &&
@@ -541,18 +539,21 @@ class FunctionCallback : public MatchFinder::MatchCallback {
               (HasClass != std::string() && LoopClassifier::hasClass(Unsliced, HasClass))) {
             llvm::errs() << LoopLocationMap[Unsliced] << "\n";
             if (DumpClasses || DumpClassesAll) {
-              for (auto Class : Classifications[Unsliced]) {
-                if (DumpClassesAll || (Class.find("!") == std::string::npos && Class.find("?") == std::string::npos)) {
-                  llvm::errs() << Class << " ";
-                }
-              }
-              llvm::errs() << "\n";
+              dumpClasses(llvm::errs(), Classifications[Unsliced]);
             }
           }
           if (DumpBlocks || DumpControlVars || DumpControlVarsDetail || DumpClasses || DumpClassesAll || DumpAST || DumpStmt || DumpIncrementVars) {
             llvm::errs() << "----------\n";
           }
         }
+      }
+
+      for (auto &MLD : LoopsAfterMerging) {
+        const NaturalLoop *Unsliced = M[MLD][0];
+        const NaturalLoop *SlicedAllLoops = M[MLD][1];
+        const NaturalLoop *SlicedOuterLoop = M[MLD][2];
+        delete SlicedAllLoops;
+        delete SlicedOuterLoop;
       }
     }
 };

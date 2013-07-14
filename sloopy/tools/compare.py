@@ -1,82 +1,48 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import json
 import os.path
 import sys
 from collections import defaultdict
 from datetime import datetime
 
-PRINT_OFFSET = True
+INCR_DETAILS = ('IntegerIter', 'DataIter', 'AArrayIter', 'PArrayIter')
+
+sloopy_classifications = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
+sloopy_classificationsb = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
 
 if sys.argv[1] == 'cBench':
     SLOOPY_ABS_START = '/Users/thomas/Documents/uni/da/llvm-build/bench/cBenchPreprocessed/'
     SLOOPY_FILE = 'classifications_cBench.txt'
     LLVM_ABS_START = '/files/sinn/cBenchPreprocessed/'
     LLVM_FILE = '01072013_preprocessed_summary.txt'
-elif sys.argv[1] == 'consumer_jpeg':
-    SLOOPY_ABS_START = '/Users/thomas/Documents/uni/da/llvm-build/bench/cBenchPreprocessed/'
-    SLOOPY_FILE = 'classifications_cBench.txt'
-    LLVM_ABS_START = '/files/sinn/cBenchPreprocessed/'
-    LLVM_FILE = '01072013_preprocessed_summary.txt'
-elif sys.argv[1] == 'wcet':
-    SLOOPY_ABS_START = '/Users/thomas/Documents/uni/da/llvm-build/bench/wcet/'
-    SLOOPY_FILE = 'classifications_wcet.txt'
-    LLVM_ABS_START = '/files/sinn/workspace/WCETBench/compiledDebug/'
-    LLVM_FILE = 'summaryWCET14062013.txt'
 else:
     sys.exit(1)
 
-sf = open(SLOOPY_FILE)
-lf = open(LLVM_FILE)
-
-# sloopy_classifications[func][line]
-sloopy_classifications = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
-sloopy_classificationsb = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
-
-# class results (count)
-results = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
-# distribution results (list of ints)
-branch = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
-
-INCR_DETAILS = ('IntegerIter', 'DataIter', 'AArrayIter', 'PArrayIter')
-
 def parse_sloopy():
-    for line in sf:
-        filepath, _, func, _, line, _, linesbe, classes = line.split(' ', 7)
+    loops = json.load(open(SLOOPY_FILE))
+    for loop in loops:
+        filepath, _, func, _, line, _, linesbe = loop['Location'].split(' ', 6)
         line = int(line)
         linesbe = list(set([ int(linebe) for linebe in linesbe.split(',')[:-1] ]))
         assert(line > 0)
         assert(not 0 in linesbe)
 
         filepath = './'+os.path.relpath(filepath, SLOOPY_ABS_START)
-        classes = classes.split()
 
         if sloopy_classifications[filepath][func].has_key(line):
             # print >> sys.stderr, "!c", filepath, func, line
             del sloopy_classifications[filepath][func][line]
         else:
-            sloopy_classifications[filepath][func][line] = (classes, linesbe)
+            sloopy_classifications[filepath][func][line] = (loop, linesbe)
         for linebe in linesbe:
-            sloopy_classificationsb[filepath][func][linebe] = (classes, line)
+            sloopy_classificationsb[filepath][func][linebe] = (loop, line)
 
+loops = list()
 def classify(sc, term, bound):
-    # process classes
-    for cls in sc:
-        suffix = None
-        if '-' in cls:
-            cls, suffix = cls.split('-', 1)
-        if cls.endswith('Branch'):
-            # Branch-Depth-3-Nodes-6
-            _, depth, _, nodes = suffix.split('-')
-            depth, nodes = (int(depth), int(nodes))
-            branch[cls+'depth'][term][bound].append(depth)
-            branch[cls+'nodes'][term][bound].append(nodes)
-        elif cls.endswith('ControlVars') or cls.endswith('Counters') or cls.endswith('Exits'):
-            # ControlVars-3
-            num = int(suffix)
-            branch[cls][term][bound].append(num)
-        else:
-            results[term][bound][cls] += 1
+    sc['LP'] = term+bound
+    loops.append(sc)
 
 HEADER_RANGE = 0
 BACKEDGE_RANGE = 8
@@ -213,7 +179,7 @@ def search_backedge_match(lookup_filename, func, line, linebe, term, bound):
 def parse_loopus():
     unmatched = 0
 
-    for l in lf:
+    for l in open(LLVM_FILE):
         term, bound, line, linebe, func, filepath = l.split()
         line = int(line)
         linebe = int(linebe)
@@ -239,39 +205,70 @@ def parse_loopus():
 parse_sloopy()
 unmatched = parse_loopus()
 
-def countif(type, r, y):
-    return sum([1 if r[0] <= depth and depth < r[1] else 0 for depth in branch[type][y[0]][y[1]]])
+SELECTORS = {
+    # predicates
+    'ANY': lambda l: True,
+    'SingleExit': lambda l: l['Exits'] == 1,
+    'Not(SingleExit)': lambda l: l['Exits'] != 1,
 
-def countall(type, r):
-    return sum([countif(type, r, y) for y in ('YY', 'YN', 'NN')])
+    # selectors
+    'Exits': lambda l, r=None: r[0] <= l['Exits'] < r[1] if r else l['Exits']
+}
 
-def sumall(c):
-    return sum([ results[y[0]][y[1]][c] for y in ('YY', 'YN', 'NN') ])
+for exit in ('SingleExit', 'StrongSingleExit'):
+    SELECTORS[exit+'.Simple'] = lambda l, exit=exit: l['Exits'] == 1 and l[exit]['Simple']
+    SELECTORS[exit+'.Not(Simple)'] = lambda l, exit=exit: l['Exits'] == 1 and not l[exit]['Simple']
+    for incr_detail in INCR_DETAILS:
+        SELECTORS[exit+'.'+incr_detail] = lambda l, exit=exit, incr_detail=incr_detail: l['Exits'] == 1 and not l[exit][incr_detail].startswith('!')
+for exit in ('MultiExit', 'StrongMultiExit'):
+    SELECTORS[exit+'.Counters'] = lambda l, r=None, exit=exit: r[0] <= l[exit]['Counters'] < r[1] if r else l[exit]['Counters']
+    SELECTORS[exit+'.Simple'] = lambda l, exit=exit: l[exit]['Simple']
+    SELECTORS[exit+'.Not(Simple)'] = lambda l, exit=exit: not l[exit]['Simple']
+    for incr_detail in INCR_DETAILS:
+        SELECTORS[exit+'.'+incr_detail] = lambda l, exit=exit, incr_detail=incr_detail: not l[exit][incr_detail].startswith('!')
+for prop in ('InfluencedByInner', 'StronglyInfluencedByInner', 'InfluencesOuter', 'StronglyInfluencesOuter', 'AmortA1', 'AmortA1InnerEqOuter', 'WeakAmortA1', 'WeakAmortA1InnerEqOuter', 'AmortA2', 'AmortA2InnerEqOuter', 'AmortB'):
+    SELECTORS[prop] = lambda l, prop=prop: l.has_key(prop) and l[prop]
+for key in ('AllLoops', 'OuterLoop'):
+    for subkey in ('BranchDepth', 'BranchNodes', 'ControlVars'):
+        SELECTORS[key+'.'+subkey] = lambda l, r=None, key=key, subkey=subkey: r[0] <= l[key][subkey] < r[1] if r else l[key][subkey]
 
-def lpb(c):
+def select2(p, r=None):
+    if r:
+        return (l for l in loops if SELECTORS[p](l,r))
+    return (l for l in loops if SELECTORS[p](l))
+
+def select(p, r=None):
+    yy = [ l for l in select2(p, r) if l['LP'] == 'YY' ]
+    yn = [ l for l in select2(p, r) if l['LP'] == 'YN' ]
+    nn = [ l for l in select2(p, r) if l['LP'] == 'NN' ]
+    return yy, yn, nn, yy+yn+nn
+
+def div0(a, b, default=0):
     try:
-        return 100. * results['Y']['Y'][c] / sumall(c)
+        return 1.*a/b
     except ZeroDivisionError:
-        return 100.
+        return default
 
-def lpt(c):
-    try:
-        return 100. * (results['Y']['Y'][c] + results['Y']['N'][c]) / sumall(c)
-    except ZeroDivisionError:
-        return 100.
+def select_count(p, of=None, range=None):
+    yy, yn, nn, all = ( len(l) for l in select(p, range) )
+    if of:
+        count_of = select_count(of)
+        return yy, yn, nn, div0(100.*yy, all), div0(100.*(yy+yn), all), yy+yn+nn, count_of[5], div0(100.*all,count_of[5])
+    else:
+        return yy, yn, nn, div0(100.*yy, all), div0(100.*(yy+yn), all), yy+yn+nn
 
-def average(s):
-    try:
-        return sum(s) * 1.0 / len(s)
-    except ZeroDivisionError:
-        return 0
+def avg(s):
+    return div0(sum(s), len(s))
 
 def stdev(s):
-    avg = average(s)
-    variance = map(lambda x: (x - avg)**2, s)
+    a = avg(s)
+    variance = map(lambda x: (x - a)**2, s)
     import math
-    standard_deviation = math.sqrt(average(variance))
+    standard_deviation = math.sqrt(avg(variance))
     return standard_deviation
+
+def select_f(p, f):
+    return ( f([SELECTORS[p](l) for l in list]) for list in select(p) )
 
 def printh(desc, expl=None):
     print
@@ -290,65 +287,53 @@ def printresult(desc, key, crosssum=True):
 
     longest_key = max([len(x) for x in key])
 
-    print ''.ljust(longest_key), "\t| YY\t| YN\t| NN\t║ LPB\t| LPT\t| Σ"
+    total = 0
+    print ''.ljust(longest_key), "\t| YY\t| YN\t| NN\t║ LPB\t| LPT\t| Σ\t|"
     for x in key:
         print x.ljust(longest_key), "\t|",
-        for y in ('YY', 'YN', 'NN'):
-            print "%2d\t%s" % (results[y[0]][y[1]][x], '║' if y == 'NN' else '|'),
-        print "%.1f\t|" % lpb(x),
-        print "%.1f\t|" % lpt(x),
+        result = select_count(x, key[0] if not crosssum else None)
+        for i, r in enumerate(result[:5]):
+            fmt_str = "%2d\t%s" if i <= 2 else "%.1f\t%s"
+            print fmt_str % (r, '║' if i == 2 else '|'),
         if crosssum or x == key[0]:
-            print sumall(x)
+            print result[5]
         else:
-            p = 100
-            try:
-                p = (100.*sumall(x)/sumall(key[0]))
-            except ZeroDivisionError:
-                pass
-            print sumall(x), "/", sumall(key[0]), "(= %.1f%%)" % p
+            print result[5], "/", result[6], "(= %.1f%%)" % result[7]
+        total += result[5]
 
     if crosssum:
         if len(key) > 1:
-            print ''.ljust(longest_key), "\t\t\t\t\t\t ", sum([sumall(x) for x in key]), "(TOTAL)"
+            print ''.ljust(longest_key), "\t\t\t\t\t\t ", total, "(TOTAL)"
     print
 
 CLASS_LIST = [(0, 1), (1, 2), (2, 3), (3, 10), (10, sys.maxint)]
 CLASS_LIST2 = [(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, sys.maxint)]
 
-def distribution(desc, type, subtype=('',), class_list=CLASS_LIST):
+def distribution(desc, type, subtypes=('',), class_list=CLASS_LIST):
     print desc
     print "-" * len (desc)
-    for x in subtype:
-        print "\t\t| YY\t| YN\t| NN\t║ LPB\t| LPT\t| Σ"
-        print "avg(%s)\t|" % (x if x else 'count'),
-        for y in ('YY', 'YN', 'NN'):
-            l = branch[type+x][y[0]][y[1]]
-            print "%.2f\t%s" % (average(l), '║' if y == 'NN' else '|'),
+    for subtype in subtypes:
+        t = type + '.' + subtype if subtype else type
+        print "\t\t| YY\t| YN\t| NN\t║ LPB\t| LPT\t| Σ\t|"
+        print "avg(%s)\t|" % (subtype if subtype else 'count'),
+        for i, a in enumerate(select_f(t, avg)):
+            print "%.2f\t%s" % (a, '║ n/a\t| n/a\t|' if i == 2 else '|'),
         print
-        print "stdev(%s)\t|" % (x if x else 'count'),
-        for y in ('YY', 'YN', 'NN'):
-            l = branch[type+x][y[0]][y[1]]
-            print "%.2f\t%s" % (stdev(l), '║' if y == 'NN' else '|'),
+        print "stdev(%s)\t|" % (subtype if subtype else 'count'),
+        for i, a in enumerate(select_f(t, stdev)):
+            print "%.2f\t%s" % (a, '║ n/a\t| n/a\t|' if i == 2 else '|'),
         print
-        total = sum([countall(type+x, r) for r in class_list])
         for r in class_list:
             if (r[1] - r[0]) == 1:
-                print "%s = %d \t|" % (x if x else 'cnt', r[0]),
+                print "%s = %d \t|" % (subtype if subtype else 'cnt', r[0]),
             else:
-                print "%s [%d, %s)\t|" % (x if x else 'cnt', r[0], str(r[1]) if r[1] != sys.maxint else "inf"),
-            for y in ('YY', 'YN', 'NN'):
-                s = countif(type+x, r, y)
-                print "%d\t%s" % (s, '║' if y == 'NN' else '|'),
-            try:
-                print "%.1f\t|" % (100.*countif(type+x, r, 'YY')/countall(type+x, r)),
-                print "%.1f\t|" % (100.*(countif(type+x, r, 'YY') + countif(type+x, r, 'YN'))/countall(type+x, r)),
-            except ZeroDivisionError:
-                print "%.1f\t|" % (100.),
-                print "%.1f\t|" % (100.),
-            try:
-                print countall(type+x, r), "\t(%.1f%%)" % (100.*countall(type+x, r)/total)
-            except ZeroDivisionError:
-                print countall(type+x, r), "\t(%.1f%%)" % 100
+                print "%s [%d, %s)\t|" % (subtype if subtype else 'cnt', r[0], str(r[1]) if r[1] != sys.maxint else "inf"),
+            result = select_count(t, range=r)
+            for i, r in enumerate(result):
+                fmt_str = "%2d\t%s" if i <= 2 or i == 5 else "%.1f\t%s"
+                print fmt_str % (r, '║' if i == 2 else '|'),
+            print
+        total = sum ((select_count(t, range=r))[5] for r in class_list)
         print "\t\t\t\t\t\t\t ", total, "(TOTAL)"
         print
 
@@ -357,7 +342,7 @@ print sys.argv[1]
 print "==================================="
 print
 print "generated", datetime.now()
-print "unmatched loos:", unmatched
+print "loops matched: %d, unmatched: %d" % (len(loops), unmatched)
 print
 print "LPT ... Loopus Performance Termination [ (YY+YN)/(YY+YN+NN) ]"
 print "LPB ... Loopus Performance Bound [ YY/(YY+YN+NN) ]"
@@ -368,27 +353,27 @@ distribution("Exits", 'Exits')
 
 printh("(Single Exit) Simple Loops", "Single exit that takes the simple form.\n")
 
-printresult("Simple Loops ⊆ Single Exit", ('SingleExit', 'SingleExit>NotSimple', 'SingleExit>Simple'), crosssum=False)
-printresult("Simple Loops (class details)", ('Not(SingleExit)', 'SingleExit>NotSimple') + tuple(('SingleExit>'+x for x in INCR_DETAILS)))
+printresult("Simple Loops ⊆ Single Exit", ('SingleExit', 'SingleExit.Not(Simple)', 'SingleExit.Simple'), crosssum=False)
+printresult("Simple Loops (class details)", ('Not(SingleExit)', 'SingleExit.Not(Simple)') + tuple(('SingleExit.'+x for x in INCR_DETAILS)))
 
 printh("Strong (Single Exit) Simple Loops", "Single exit that takes the simple form AND exactly 1 increment on each path.\n")
 
-printresult("Strong Simple Loops ⊆ Single Exit", ('SingleExit', 'StrongSingleExit>NotSimple', 'StrongSingleExit>Simple'), crosssum=False)
-printresult("Strong Simple Loops ⊆ Simple Loops", ('SingleExit>Simple', 'StrongSingleExit>Simple'), crosssum=False)
-printresult("Strong Simple Loops (class details)", ('Not(SingleExit)', 'StrongSingleExit>NotSimple') + tuple(('StrongSingleExit>'+x for x in INCR_DETAILS)))
+printresult("Strong Simple Loops ⊆ Single Exit", ('SingleExit', 'StrongSingleExit.Not(Simple)', 'StrongSingleExit.Simple'), crosssum=False)
+printresult("Strong Simple Loops ⊆ Simple Loops", ('SingleExit.Simple', 'StrongSingleExit.Simple'), crosssum=False)
+printresult("Strong Simple Loops (class details)", ('Not(SingleExit)', 'StrongSingleExit.Not(Simple)') + tuple(('StrongSingleExit.'+x for x in INCR_DETAILS)))
 
 printh("Semi-simple Loops", "Multiple exits, where SOME take the simple form.\n")
 
-printresult("Semi-simple Loops ⊆ Multi Exit", ('ANY', 'MultiExit>NotSimple', 'MultiExit>Simple'), crosssum=False)
-printresult("Semi-simple Loops (class details)", ('MultiExit>NotSimple',) +  tuple(('MultiExit>'+x for x in INCR_DETAILS)))
-distribution("Semi-simple Loop Counter Variables", 'MultiExit>Counters', class_list=CLASS_LIST2)
+printresult("Semi-simple Loops ⊆ Multi Exit", ('ANY', 'MultiExit.Not(Simple)', 'MultiExit.Simple'), crosssum=False)
+printresult("Semi-simple Loops (class details)", ('MultiExit.Not(Simple)',) +  tuple(('MultiExit.'+x for x in INCR_DETAILS)))
+distribution("Semi-simple Loop Counter Variables", 'MultiExit.Counters', class_list=CLASS_LIST2)
 
 printh("Strong Semi-simple Loops", "Multiple exits, where SOME take the simple form AND exactly 1 increment on each path.\n")
 
-printresult("Strong Semi-simple Loops ⊆ Multi Exit", ('ANY', 'StrongMultiExit>NotSimple', 'StrongMultiExit>Simple'), crosssum=False)
-printresult("Strong Semi-simple Loops ⊆ Semi-simple Loops", ('MultiExit>Simple', 'StrongMultiExit>Simple'), crosssum=False)
-printresult("Strong Semi-simple Loops (class details)", ('StrongMultiExit>NotSimple',) +  tuple(('StrongMultiExit>'+x for x in INCR_DETAILS)))
-distribution("Strong Semi-simple Loop Counter Variables", 'StrongMultiExit>Counters', class_list=CLASS_LIST2)
+printresult("Strong Semi-simple Loops ⊆ Multi Exit", ('ANY', 'StrongMultiExit.Not(Simple)', 'StrongMultiExit.Simple'), crosssum=False)
+printresult("Strong Semi-simple Loops ⊆ Semi-simple Loops", ('MultiExit.Simple', 'StrongMultiExit.Simple'), crosssum=False)
+printresult("Strong Semi-simple Loops (class details)", ('StrongMultiExit.Not(Simple)',) +  tuple(('StrongMultiExit.'+x for x in INCR_DETAILS)))
+distribution("Strong Semi-simple Loop Counter Variables", 'StrongMultiExit.Counters', class_list=CLASS_LIST2)
 
 printh("Influencing/-ed loops")
 
@@ -406,8 +391,8 @@ printresult("Amortized B (inner bound is increment-delta of outer)", 'AmortB')
 
 printh("Control Flow")
 
-distribution("Branching (all loop slice)", 'AllLoopsBranch', ('depth', 'nodes'))
-distribution("Branching (outer loop slice)", 'OuterLoopBranch', ('depth', 'nodes'))
+distribution("Branching (all loop slice)", 'AllLoops', ('BranchDepth', 'BranchNodes'))
+distribution("Branching (outer loop slice)", 'OuterLoop', ('BranchDepth', 'BranchNodes'))
 
-distribution("Control Variables (all loop slice)", 'AllLoopsControlVars')
-distribution("Control Variables (outer loop slice)", 'OuterLoopControlVars')
+distribution("Control Variables (all loop slice)", 'AllLoops.ControlVars')
+distribution("Control Variables (outer loop slice)", 'OuterLoop.ControlVars')

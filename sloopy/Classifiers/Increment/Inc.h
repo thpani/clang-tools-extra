@@ -4,7 +4,7 @@
 #include "Helpers.h"
 
 static IncrementInfo getIncrementInfo(const Expr *Expr, const std::string Marker, const ASTContext *Context, const TypePredicate TypePredicate) throw(checkerror) {
-  if (Expr == NULL) throw checkerror(Fail, Marker, "Inc_None");
+  if (Expr == NULL) throw checkerror("Inc_None");
   const class Expr *Expression = Expr->IgnoreParenCasts();
   if (const UnaryOperator *UOP = dyn_cast<UnaryOperator>(Expression)) {
     // i{++,--}
@@ -59,5 +59,5 @@ static IncrementInfo getIncrementInfo(const Expr *Expr, const std::string Marker
       }
     }
   }
-  throw checkerror(Fail, Marker, "Inc_NotValid");
+  throw checkerror("Inc_NotValid");
 }

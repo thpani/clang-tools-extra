@@ -1,3 +1,5 @@
-set(LLVM_REQUIRES_EH 1)
-add_clang_executable(sloopy Sloopy.cpp)
-target_link_libraries(sloopy clangTooling)
+FIND_PACKAGE( Boost 1.40 COMPONENTS system REQUIRED )
+INCLUDE_DIRECTORIES( ${Boost_INCLUDE_DIR} )
+SET(LLVM_REQUIRES_EH 1)
+ADD_CLANG_EXECUTABLE(sloopy Sloopy.cpp)
+TARGET_LINK_LIBRARIES(sloopy clangTooling ${Boost_LIBRARIES} )

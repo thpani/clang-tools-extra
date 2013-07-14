@@ -6,14 +6,7 @@ class ExitClassifier : public LoopClassifier {
   public:
     void classify(const NaturalLoop* Loop) const {
       unsigned PredSize = Loop->getExit().pred_size();
-      LoopClassifier::classify(Loop, Success, "Exits", PredSize);
-
-      LoopClassifier::classify(Loop, "MultiExit");
-      if (PredSize == 1) {
-        LoopClassifier::classify(Loop, "SingleExit");
-      } else {
-        LoopClassifier::classify(Loop, "Not(SingleExit)");
-      }
+      LoopClassifier::classify(Loop, "Exits", PredSize);
     }
 };
 
@@ -56,11 +49,12 @@ class BranchingClassifier : public LoopClassifier {
       }
       if (depth>0) depth--;
 
-      std::stringstream sstm;
-      sstm << "Depth-" << depth << "-Nodes-" << nodes;
-
-      LoopClassifier::classify(Loop, Success, SliceType+"Branch", sstm.str());
-      return;
+      {
+        LoopClassifier::classify(Loop, SliceType, "BranchDepth", depth);
+      }
+      {
+        LoopClassifier::classify(Loop, SliceType, "BranchNodes", nodes);
+      }
     }
 };
 
@@ -69,10 +63,7 @@ class ControlVarClassifier : public LoopClassifier {
   public:
     ControlVarClassifier(const std::string SliceType) : SliceType(SliceType) {}
     void classify(const NaturalLoop *Loop) const {
-      std::stringstream sstm;
-      sstm << Loop->getControlVars().size();
-
-      LoopClassifier::classify(Loop, Success, SliceType+"ControlVars", sstm.str());
-      return;
+      unsigned CVars = Loop->getControlVars().size();
+      LoopClassifier::classify(Loop, SliceType, "ControlVars", CVars);
     }
 };

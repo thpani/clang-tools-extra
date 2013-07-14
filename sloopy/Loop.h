@@ -492,8 +492,6 @@ bool NaturalLoop::build(
             PostDom = PDT.getNode(PostDom)->getIDom()->getBlock();
           } while (std::find(Blocks.begin(), Blocks.end(), PostDom) == Blocks.end());
 
-          if (std::find(Blocks.begin(), Blocks.end(), PostDom) == Blocks.end());
-
           // redirect pointer Pred->Current to Pred->PostDom
           for (NaturalLoopBlock::const_succ_iterator SI = Pred->Succs.begin(),
                                                  SE = Pred->Succs.end();
@@ -541,8 +539,6 @@ typedef std::pair<const NaturalLoop*, const NaturalLoop*> NaturalLoopPair;
 } // namespace sloopy
 
 using namespace sloopy;
-
-std::map<const NaturalLoop*, std::set<std::string> > Classifications;
 
 //===----------------------------------------------------------------------===//
 // CFG pretty printing (CFG.cpp)

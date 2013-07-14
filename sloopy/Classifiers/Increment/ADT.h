@@ -68,7 +68,7 @@ struct IncrementClassifierConstraint {
   const ExitsWellformedConstraint EWConstr;
   const IncrementsConstraint IConstr;
 
-  std::string str(const std::string Marker=std::string()) const {
+  std::string str() const {
     std::stringstream Result;
 
     switch (IConstr) {
@@ -97,10 +97,6 @@ struct IncrementClassifierConstraint {
       case ALL_WELLFORMED:
         Result << "AllWellformed";
         break;
-    }
-
-    if (Marker.size()) {
-      Result << ">" << Marker;
     }
 
     return Result.str();

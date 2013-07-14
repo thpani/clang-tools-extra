@@ -3,7 +3,6 @@
 #include "Increment/Increment.h"
 
 class MasterIncrementClassifier : public LoopClassifier {
-  const ASTContext* Context;
   const ExitClassifier ExitClassifier;
   const IntegerIterClassifier IntegerIterClassifier;
   const AArrayIterClassifier AArrayIterClassifier;
@@ -17,7 +16,6 @@ class MasterIncrementClassifier : public LoopClassifier {
   }
   public:
     MasterIncrementClassifier(const ASTContext* Context) :
-      Context(Context),
       ExitClassifier(),
       IntegerIterClassifier(Context),
       AArrayIterClassifier(Context),
@@ -27,11 +25,6 @@ class MasterIncrementClassifier : public LoopClassifier {
       std::set<IncrementLoopInfo> Result, CombinedSet;
 
       ExitClassifier.classify(Loop);
-
-      if (!LoopClassifier::hasClass(Loop, Constr.strIn())) {
-        LoopClassifier::classify(Loop, Success, "Not("+Constr.strIn()+")");
-        return CombinedSet;
-      }
 
       Result = IntegerIterClassifier.classify(Loop, Constr);
       collectIncrementSet(Result, CombinedSet);
@@ -45,24 +38,18 @@ class MasterIncrementClassifier : public LoopClassifier {
       Result = DataIterClassifier.classify(Loop, Constr);
       collectIncrementSet(Result, CombinedSet);
 
-      if (CombinedSet.size() == 0) {
-        LoopClassifier::classify(Loop, Success, Constr.str("NotSimple"));
-      } else {
-        LoopClassifier::classify(Loop, Success, Constr.str("Simple"));
-      }
+      const bool IsSimple = CombinedSet.size() > 0;
+      LoopClassifier::classify(Loop, Constr.str(), "Simple", IsSimple);
 
       std::set<const VarDecl*> Counters;
       for (auto ILI : CombinedSet) {
         Counters.insert(ILI.VD);
       }
 
-      std::stringstream sstm;
-      sstm << Counters.size();
-
-      LoopClassifier::classify(Loop, Success, Constr.str("Counters"), sstm.str());
+      const unsigned CounterSetSize = Counters.size();
+      LoopClassifier::classify(Loop, Constr.str(), "Counters", CounterSetSize);
 
       return CombinedSet;
-
     }
 };
 

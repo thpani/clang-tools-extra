@@ -35,29 +35,29 @@ class PArrayIterClassifier : public IncrementClassifier {
 class DataIterClassifier : public IncrementClassifier {
   protected:
     IncrementInfo getIncrementInfo(const Expr *Expr) const throw (checkerror) {
-      if (Expr == NULL) throw checkerror(Fail, Marker, "Inc_None");
+      if (Expr == NULL) throw checkerror("Inc_None");
       const class Expr *Expression = Expr->IgnoreParenCasts();
       const BinaryOperator *BO;
       if (!(BO = dyn_cast<BinaryOperator>(Expression))) {
-        throw checkerror(Fail, Marker, "Inc_NotBinary");
+        throw checkerror("Inc_NotBinary");
       }
       const VarDecl *IncVar;
       if (!(IncVar = getVariable(BO->getLHS()))) {
-        throw checkerror(Fail, Marker, "Inc_LHSNoVar");
+        throw checkerror("Inc_LHSNoVar");
       }
       if (!(*IncVar->getType()).isPointerType()) {
-        throw checkerror(Fail, Marker, "Inc_LHSNoPtr");
+        throw checkerror("Inc_LHSNoPtr");
       }
       const MemberExpr *RHS;
       if (!(RHS = dyn_cast<MemberExpr>(BO->getRHS()->IgnoreParenCasts()))) {
-        throw checkerror(Fail, Marker, "Inc_RHSNoMemberExpr");
+        throw checkerror("Inc_RHSNoMemberExpr");
       }
       const VarDecl *Base;
       if (!(Base = getVariable(RHS->getBase()))) {
-        throw checkerror(Fail, Marker, "Inc_RHSBaseNoVar");
+        throw checkerror("Inc_RHSBaseNoVar");
       }
       if (Base != IncVar) {
-        throw checkerror(Fail, Marker, "Inc_RHSBaseNeqInc");
+        throw checkerror("Inc_RHSBaseNeqInc");
       }
       return { IncVar, BO, VarDeclIntPair() };
     }
@@ -82,7 +82,7 @@ class AArrayIterClassifier : public IncrementClassifier {
 
       /* COND */
       if (Cond == NULL) {
-        throw checkerror(Unknown, Marker, "Cond_None");
+        throw checkerror("Cond_None");
       }
 
       const Expr *CondInner = Cond->IgnoreParenCasts();
@@ -90,7 +90,7 @@ class AArrayIterClassifier : public IncrementClassifier {
       if (const ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(CondInner)) {
         auto A = getArrayVariables(ASE);
         if (A.second != Increment.VD) {
-          throw checkerror(Unknown, Marker, "Cond_LoopVar_NotIn_ArraySubscript");
+          throw checkerror("Cond_LoopVar_NotIn_ArraySubscript");
         }
         Bound = new VarDeclIntPair(A.first);
       }
@@ -121,7 +121,7 @@ class AArrayIterClassifier : public IncrementClassifier {
               LoopVarLHS = false;
             }
             else {
-              throw checkerror(Unknown, Marker, "Cond_LoopVar_NotIn_ArraySubscript");
+              throw checkerror("Cond_LoopVar_NotIn_ArraySubscript");
             }
           }
           else if (LHSBase != NULL && LHSIdx == Increment.VD && isIntegerConstant(RHS, Context)) {
@@ -145,19 +145,13 @@ class AArrayIterClassifier : public IncrementClassifier {
             Bound = new VarDeclIntPair(getVariable(LHS));
           }
           else if (LHSBase != NULL && LHSIdx == Increment.VD && isa<UnaryExprOrTypeTraitExpr>(RHS->IgnoreParenCasts())) {
-            // LHS is loop var, RHS is sizeof() bound
-            const UnaryExprOrTypeTraitExpr *B = dyn_cast<UnaryExprOrTypeTraitExpr>(RHS->IgnoreParenCasts());
-            if (B->getKind() != UETT_SizeOf) {
-              LoopVarLHS = true;
-            }
+            // LHS is loop var, RHS is sizeof/alignof() bound
+            LoopVarLHS = true;
             Bound = new VarDeclIntPair();
           }
           else if (RHSBase != NULL && RHSIdx == Increment.VD && isa<UnaryExprOrTypeTraitExpr>(LHS->IgnoreParenCasts())) {
-            // RHS is loop var, LHS is sizeof() bound
-            const UnaryExprOrTypeTraitExpr *B = dyn_cast<UnaryExprOrTypeTraitExpr>(LHS->IgnoreParenCasts());
-            if (B->getKind() != UETT_SizeOf) {
-              LoopVarLHS = false;
-            }
+            // RHS is loop var, LHS is sizeof/alignof() bound
+            LoopVarLHS = false;
             Bound = new VarDeclIntPair();
           }
           else if (LHSBase != NULL && LHSIdx == Increment.VD) {
@@ -171,17 +165,17 @@ class AArrayIterClassifier : public IncrementClassifier {
             Bound = new VarDeclIntPair();
           }
           else {
-            throw checkerror(Fail, Marker, "Cond_BinOp_TooComplex");
+            throw checkerror("Cond_BinOp_TooComplex");
           }
           BoundVar = LoopVarLHS ? RHSBase : LHSBase; // null if integer-literal, sizeof, ...
           if (BoundVar) Bound = new VarDeclIntPair(BoundVar);
         }
         else {
-          throw checkerror(Unknown, Marker, "Cond_BinOp_OpNotSupported");
+          throw checkerror("Cond_BinOp_OpNotSupported");
         }
       }
       else {
-        throw checkerror(Unknown, Marker, "Cond_OpNotSupported");
+        throw checkerror("Cond_OpNotSupported");
       }
 
       assert(Bound);

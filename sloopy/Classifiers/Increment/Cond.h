@@ -12,7 +12,7 @@ static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
 
   /* COND */
   if (Cond == NULL) {
-    throw checkerror(Unknown, Marker, "Cond_None");
+    throw checkerror("Cond_None");
   }
   /* check the condition is a binary operator
     * where either LHS or RHS are integer literals
@@ -23,7 +23,7 @@ static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
   const VarDeclIntPair *Bound;
   if (const VarDecl *VD = getVariable(CondInner)) {
     if (!TypePredicate(VD)) {
-      throw checkerror(Fail, Marker, "Cond_Var_WrongType");
+      throw checkerror("Cond_Var_WrongType");
     }
     CondVar = VD;
     Bound = new VarDeclIntPair(VD);
@@ -35,14 +35,14 @@ static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
         Bound = new VarDeclIntPair(VD);
       }
       else {
-        throw checkerror(Unknown, Marker, "Cond_Unary_NoTypeVar");
+        throw checkerror("Cond_Unary_NoTypeVar");
       }
     }
     else if (UO->getOpcode() == UO_Deref) {
       return checkIncrementCond(UO->getSubExpr(), Increment, TypePredicate, Context, Marker);
     }
     else {
-      throw checkerror(Unknown, Marker, "Cond_Unary_NotIncDec");
+      throw checkerror("Cond_Unary_NotIncDec");
     }
   }
   else if (const BinaryOperator *ConditionOp = dyn_cast<BinaryOperator>(CondInner)) {
@@ -84,7 +84,7 @@ static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
           LoopVarLHS = false;
         }
         else {
-          throw checkerror(Unknown, Marker, "Cond_LoopVar_NotIn_BinaryOperator");
+          throw checkerror("Cond_LoopVar_NotIn_BinaryOperator");
         }
       }
       else if (LHS != NULL && isIntegerConstant(ConditionOp->getRHS(), Context)) {
@@ -97,21 +97,15 @@ static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
         LoopVarLHS = false;
         Bound = new VarDeclIntPair(getIntegerConstant(ConditionOp->getLHS(), Context));
       }
-      else if (LHS != NULL && dyn_cast<UnaryExprOrTypeTraitExpr>(ConditionOp->getRHS()->IgnoreParenCasts())) {
-        // LHS is loop var, RHS is sizeof() bound
-        if (const UnaryExprOrTypeTraitExpr *B = dyn_cast<UnaryExprOrTypeTraitExpr>(ConditionOp->getRHS()->IgnoreParenCasts())) {
-          if (B->getKind() == UETT_SizeOf) {
-            LoopVarLHS = true;
-          }
-        }
+      else if (LHS != NULL && isa<UnaryExprOrTypeTraitExpr>(ConditionOp->getRHS()->IgnoreParenCasts())) {
+        // LHS is loop var, RHS is sizeof/alignof() bound
+        LoopVarLHS = true;
+        Bound = new VarDeclIntPair();
       }
-      else if (RHS != NULL && dyn_cast<UnaryExprOrTypeTraitExpr>(ConditionOp->getLHS()->IgnoreParenCasts())) {
-        // RHS is loop var, LHS is sizeof() bound
-        if (const UnaryExprOrTypeTraitExpr *B = dyn_cast<UnaryExprOrTypeTraitExpr>(ConditionOp->getLHS()->IgnoreParenCasts())) {
-          if (B->getKind() == UETT_SizeOf) {
-            LoopVarLHS = false;
-          }
-        }
+      else if (RHS != NULL && isa<UnaryExprOrTypeTraitExpr>(ConditionOp->getLHS()->IgnoreParenCasts())) {
+        // RHS is loop var, LHS is sizeof/alignof() bound
+        LoopVarLHS = false;
+        Bound = new VarDeclIntPair();
       }
       else if (LHS != NULL && LHS == Increment.VD) {
         LoopVarLHS = true;
@@ -124,18 +118,18 @@ static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
         Bound = new VarDeclIntPair();
       }
       else {
-        throw checkerror(Fail, Marker, "Cond_BinOp_TooComplex");
+        throw checkerror("Cond_BinOp_TooComplex");
       }
       CondVar = LoopVarLHS ? LHS : RHS;
       BoundVar = LoopVarLHS ? RHS : LHS; // null if integer-literal, sizeof, ...
       if (BoundVar) Bound = new VarDeclIntPair(BoundVar);
     }
     else {
-      throw checkerror(Unknown, Marker, "Cond_BinOp_OpNotSupported");
+      throw checkerror("Cond_BinOp_OpNotSupported");
     }
   }
   else {
-    throw checkerror(Unknown, Marker, "Cond_OpNotSupported");
+    throw checkerror("Cond_OpNotSupported");
   }
   assert(CondVar);
   assert(Bound);
@@ -143,13 +137,13 @@ static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
   /* VARS */
 
   if (CondVar != Increment.VD) {
-    throw checkerror(Unknown, Marker, "CondVar_NEQ_IncVar");
+    throw checkerror("CondVar_NEQ_IncVar");
   }
   if (!TypePredicate(CondVar)) {
-    throw checkerror(Unknown, Marker, "CondVar_WrongType");
+    throw checkerror("CondVar_WrongType");
   }
   if (Bound->Var && !TypePredicate(Bound->Var)) {
-    throw checkerror(Unknown, Marker, "BoundVar_WrongType");
+    throw checkerror("BoundVar_WrongType");
   }
 
   return std::pair<std::string, VarDeclIntPair>(Suffix, *std::unique_ptr<const VarDeclIntPair>(Bound).get());
