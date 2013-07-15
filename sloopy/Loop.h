@@ -471,9 +471,9 @@ bool NaturalLoop::build(
   if (TrackedStmts != NULL) {
     llvm::DominatorTreeBase<NaturalLoopBlock> PDT(true);
     PDT.recalculate(*const_cast<NaturalLoop*>(this));
-    for (NaturalLoop::const_iterator BI = Blocks.begin(),
-                                     BE = Blocks.end();
-                                     BI != BE; ) {
+    for (NaturalLoop::iterator BI = Blocks.begin(),
+                               BE = Blocks.end();
+                               BI != BE; ) {
       NaturalLoopBlock *Current = *BI;
       /* std::cerr << Current->getBlockID() << "\n"; */
       if (Current == Entry || Current == Exit) {

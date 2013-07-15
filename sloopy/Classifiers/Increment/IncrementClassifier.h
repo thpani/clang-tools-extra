@@ -6,7 +6,7 @@
 
 class IncrementClassifier : public LoopClassifier {
   private:
-    mutable std::vector<const PseudoConstantInfo> PseudoConstantSet;
+    mutable std::vector<PseudoConstantInfo> PseudoConstantSet;
 
     class LoopVariableFinder : public RecursiveASTVisitor<LoopVariableFinder> {
       public:
