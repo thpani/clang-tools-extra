@@ -13,10 +13,10 @@ sloopy_classifications = defaultdict(lambda: defaultdict(lambda: defaultdict(dic
 sloopy_classificationsb = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
 
 if sys.argv[1] == 'cBench':
-    SLOOPY_ABS_START = '/Users/thomas/Documents/uni/da/llvm-build/bench/cBenchPreprocessed/'
+    SLOOPY_ABS_START = '/home/thomas/src/da/llvm-build/bench/cBench_preprocessed_2013_07_01_Merged/'
     SLOOPY_FILE = 'classifications_cBench.txt'
     LLVM_ABS_START = '/files/sinn/cBenchPreprocessed/'
-    LLVM_FILE = '01072013_preprocessed_summary.txt'
+    LLVM_FILE = 'bench/cBench_preprocessed_2013_07_01_Merged_summary.txt'
 else:
     sys.exit(1)
 
@@ -314,7 +314,8 @@ def distribution(desc, type, subtypes=('',), class_list=CLASS_LIST):
     print "-" * len (desc)
     for subtype in subtypes:
         t = type + '.' + subtype if subtype else type
-        print "\t\t| YY\t| YN\t| NN\t║ LPB\t| LPT\t| Σ\t|"
+        longest_key = len(subtype if subtype else 'count')+7
+        print ''.ljust(longest_key), "\t| YY\t| YN\t| NN\t║ LPB\t| LPT\t| Σ\t|"
         print "avg(%s)\t|" % (subtype if subtype else 'count'),
         for i, a in enumerate(select_f(t, avg)):
             print "%.2f\t%s" % (a, '║ n/a\t| n/a\t|' if i == 2 else '|'),

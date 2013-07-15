@@ -89,7 +89,7 @@ if [[ $2 == "run" ]] ; then
     elif [[ ${BENCH} == "wcet" ]] ; then
         FILES=$(find ${BENCH_DIR}/wcet/ -not -name des.c -and -name '*.c')
     elif [[ ${BENCH} == "cBench" ]] ; then
-        FILES=$(find ${BENCH_DIR}/cBenchPreprocessed/$3 -name '*.c')
+        FILES=$(find ${BENCH_DIR}/cBench_preprocessed_2013_07_01_Merged/$3 -name '*.c')
 
         # INCLUDES=$(find ${BENCH_DIR}/cBenchPreprocessed/ -name '*.c' | xargs -L1 dirname | sort | uniq | sed 's/^/-I/' | tr '\n' ' ')
         # # consumer_mad
@@ -113,7 +113,7 @@ if [[ $2 == "run" ]] ; then
     fi
     echo "BENCH\t$BENCH">$BENCH.stats
 
-    ninja || exit 1
+    ninja sloopy || exit 1
     LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -loop-stats"
     # LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -per-loop-stats"
     t0=`date +%s`
