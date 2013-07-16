@@ -488,7 +488,7 @@ class FunctionCallback : public MatchFinder::MatchCallback {
             const Stmt *S = getGotoLCA(Unsliced->getLoopStmt(), D);
             S->dump();
           }
-          if (ViewSliced || ViewSlicedOuter || ViewUnsliced || ViewCFG) {
+          if (ViewSliced || ViewSlicedOuter || ViewUnsliced) {
             llvm::errs() << "Back edges: ";
             for (auto Tail : MLD.Tails) {
               llvm::errs() << Tail->getBlockID();

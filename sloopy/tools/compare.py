@@ -211,19 +211,31 @@ SELECTORS = {
     'SingleExit': lambda l: l['Exits'] == 1,
     'Not(SingleExit)': lambda l: l['Exits'] != 1,
 
+    'FOR': lambda l: l['Stmt'] == 'FOR',
+    'WHILE': lambda l: l['Stmt'] == 'WHILE',
+    'DO': lambda l: l['Stmt'] == 'DO',
+    'GOTO': lambda l: l['Stmt'] == 'GOTO',
+
     # selectors
     'Exits': lambda l, r=None: r[0] <= l['Exits'] < r[1] if r else l['Exits']
 }
 
+LOOP_STMT = ('FOR', 'WHILE', 'DO', 'GOTO')
 for exit in ('SingleExit', 'StrongSingleExit'):
     SELECTORS[exit+'.Simple'] = lambda l, exit=exit: l['Exits'] == 1 and l[exit]['Simple']
     SELECTORS[exit+'.Not(Simple)'] = lambda l, exit=exit: l['Exits'] == 1 and not l[exit]['Simple']
+    for loop_stmt in LOOP_STMT:
+        SELECTORS[exit+'.Simple'+' '+loop_stmt] = lambda l, exit=exit, loop_stmt=loop_stmt: l['Exits'] == 1 and l[exit]['Simple'] and l['Stmt'] == loop_stmt
+        SELECTORS[exit+'.Not(Simple)'+' '+loop_stmt] = lambda l, exit=exit, loop_stmt=loop_stmt: l['Exits'] == 1 and not l[exit]['Simple'] and l['Stmt'] == loop_stmt
     for incr_detail in INCR_DETAILS:
         SELECTORS[exit+'.'+incr_detail] = lambda l, exit=exit, incr_detail=incr_detail: l['Exits'] == 1 and not l[exit][incr_detail].startswith('!')
 for exit in ('MultiExit', 'StrongMultiExit'):
     SELECTORS[exit+'.Counters'] = lambda l, r=None, exit=exit: r[0] <= l[exit]['Counters'] < r[1] if r else l[exit]['Counters']
     SELECTORS[exit+'.Simple'] = lambda l, exit=exit: l[exit]['Simple']
     SELECTORS[exit+'.Not(Simple)'] = lambda l, exit=exit: not l[exit]['Simple']
+    for loop_stmt in LOOP_STMT:
+        SELECTORS[exit+'.Simple'+' '+loop_stmt] = lambda l, exit=exit, loop_stmt=loop_stmt: l[exit]['Simple'] and l['Stmt'] == loop_stmt
+        SELECTORS[exit+'.Not(Simple)'+' '+loop_stmt] = lambda l, exit=exit, loop_stmt=loop_stmt: not l[exit]['Simple'] and l['Stmt'] == loop_stmt
     for incr_detail in INCR_DETAILS:
         SELECTORS[exit+'.'+incr_detail] = lambda l, exit=exit, incr_detail=incr_detail: not l[exit][incr_detail].startswith('!')
 for prop in ('InfluencedByInner', 'StronglyInfluencedByInner', 'InfluencesOuter', 'StronglyInfluencesOuter', 'AmortA1', 'AmortA1InnerEqOuter', 'WeakAmortA1', 'WeakAmortA1InnerEqOuter', 'AmortA2', 'AmortA2InnerEqOuter', 'AmortB'):
@@ -351,23 +363,30 @@ print
 
 printresult("Single Exit vs. Multi Exit", ('ANY', 'SingleExit', 'Not(SingleExit)'), crosssum=False)
 distribution("Exits", 'Exits')
+printresult("Statements", ('ANY',) + LOOP_STMT, crosssum=False)
 
 printh("(Single Exit) Simple Loops", "Single exit that takes the simple form.\n")
 
 printresult("Simple Loops ⊆ Single Exit", ('SingleExit', 'SingleExit.Not(Simple)', 'SingleExit.Simple'), crosssum=False)
 printresult("Simple Loops (class details)", ('Not(SingleExit)', 'SingleExit.Not(Simple)') + tuple(('SingleExit.'+x for x in INCR_DETAILS)))
+printresult("Statements", ('SingleExit.Simple', 'SingleExit.Simple FOR', 'SingleExit.Simple WHILE', 'SingleExit.Simple DO', 'SingleExit.Simple GOTO'), crosssum=False)
+printresult("Statements", ('SingleExit.Not(Simple)', 'SingleExit.Not(Simple) FOR', 'SingleExit.Not(Simple) WHILE', 'SingleExit.Not(Simple) DO', 'SingleExit.Not(Simple) GOTO'), crosssum=False)
 
 printh("Strong (Single Exit) Simple Loops", "Single exit that takes the simple form AND exactly 1 increment on each path.\n")
 
 printresult("Strong Simple Loops ⊆ Single Exit", ('SingleExit', 'StrongSingleExit.Not(Simple)', 'StrongSingleExit.Simple'), crosssum=False)
 printresult("Strong Simple Loops ⊆ Simple Loops", ('SingleExit.Simple', 'StrongSingleExit.Simple'), crosssum=False)
 printresult("Strong Simple Loops (class details)", ('Not(SingleExit)', 'StrongSingleExit.Not(Simple)') + tuple(('StrongSingleExit.'+x for x in INCR_DETAILS)))
+printresult("Statements", ('StrongSingleExit.Simple', 'StrongSingleExit.Simple FOR', 'StrongSingleExit.Simple WHILE', 'StrongSingleExit.Simple DO', 'StrongSingleExit.Simple GOTO'), crosssum=False)
+printresult("Statements", ('StrongSingleExit.Not(Simple)', 'StrongSingleExit.Not(Simple) FOR', 'StrongSingleExit.Not(Simple) WHILE', 'StrongSingleExit.Not(Simple) DO', 'StrongSingleExit.Not(Simple) GOTO'), crosssum=False)
 
 printh("Semi-simple Loops", "Multiple exits, where SOME take the simple form.\n")
 
 printresult("Semi-simple Loops ⊆ Multi Exit", ('ANY', 'MultiExit.Not(Simple)', 'MultiExit.Simple'), crosssum=False)
 printresult("Semi-simple Loops (class details)", ('MultiExit.Not(Simple)',) +  tuple(('MultiExit.'+x for x in INCR_DETAILS)))
 distribution("Semi-simple Loop Counter Variables", 'MultiExit.Counters', class_list=CLASS_LIST2)
+printresult("Statements", ('MultiExit.Simple', 'MultiExit.Simple FOR', 'MultiExit.Simple WHILE', 'MultiExit.Simple DO', 'MultiExit.Simple GOTO'), crosssum=False)
+printresult("Statements", ('MultiExit.Not(Simple)', 'MultiExit.Not(Simple) FOR', 'MultiExit.Not(Simple) WHILE', 'MultiExit.Not(Simple) DO', 'MultiExit.Not(Simple) GOTO'), crosssum=False)
 
 printh("Strong Semi-simple Loops", "Multiple exits, where SOME take the simple form AND exactly 1 increment on each path.\n")
 
@@ -375,6 +394,8 @@ printresult("Strong Semi-simple Loops ⊆ Multi Exit", ('ANY', 'StrongMultiExit.
 printresult("Strong Semi-simple Loops ⊆ Semi-simple Loops", ('MultiExit.Simple', 'StrongMultiExit.Simple'), crosssum=False)
 printresult("Strong Semi-simple Loops (class details)", ('StrongMultiExit.Not(Simple)',) +  tuple(('StrongMultiExit.'+x for x in INCR_DETAILS)))
 distribution("Strong Semi-simple Loop Counter Variables", 'StrongMultiExit.Counters', class_list=CLASS_LIST2)
+printresult("Statements", ('StrongMultiExit.Simple', 'StrongMultiExit.Simple FOR', 'StrongMultiExit.Simple WHILE', 'StrongMultiExit.Simple DO', 'StrongMultiExit.Simple GOTO'), crosssum=False)
+printresult("Statements", ('StrongMultiExit.Not(Simple)', 'StrongMultiExit.Not(Simple) FOR', 'StrongMultiExit.Not(Simple) WHILE', 'StrongMultiExit.Not(Simple) DO', 'StrongMultiExit.Not(Simple) GOTO'), crosssum=False)
 
 printh("Influencing/-ed loops")
 
