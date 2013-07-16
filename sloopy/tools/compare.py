@@ -245,9 +245,13 @@ for key in ('AllLoops', 'OuterLoop'):
         SELECTORS[key+'.'+subkey] = lambda l, r=None, key=key, subkey=subkey: r[0] <= l[key][subkey] < r[1] if r else l[key][subkey]
 
 def select2(p, r=None):
+    if isinstance(p, basestring):
+        selector = SELECTORS[p]
+    else:
+        selector = p
     if r:
-        return (l for l in loops if SELECTORS[p](l,r))
-    return (l for l in loops if SELECTORS[p](l))
+        return (l for l in loops if selector(l,r))
+    return (l for l in loops if selector(l))
 
 def select(p, r=None):
     yy = [ l for l in select2(p, r) if l['LP'] == 'YY' ]
@@ -349,6 +353,12 @@ def distribution(desc, type, subtypes=('',), class_list=CLASS_LIST):
         total = sum ((select_count(t, range=r))[5] for r in class_list)
         print "\t\t\t\t\t\t\t ", total, "(TOTAL)"
         print
+
+if len(sys.argv) == 3:
+    # for loop in select2(lambda l: l['Exits'] == 1 and l['Stmt'] == 'GOTO' and not l['SingleExit']['Simple']):
+    for loop in select2(lambda l: eval(sys.argv[2])):
+        print loop['Location']
+    sys.exit(0)
 
 print "==================================="
 print sys.argv[1]
