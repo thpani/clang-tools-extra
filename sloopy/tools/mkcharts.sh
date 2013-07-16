@@ -2,78 +2,12 @@ BENCH=$1
 BENCH_DIR="$(pwd)/bench"
 TIMESTAMP=$(date "+%Y-%m-%d_%H:%M")
 
-if [[ ${BENCH} == "setup" ]] ; then
-    rm -rf ${BENCH_DIR}
-    mkdir -p ${BENCH_DIR}/include/
-    mkdir benchdot/
-
-    cd ${BENCH_DIR}
-
-    wget 'http://www.mrtc.mdh.se/projects/wcet/wcet_bench.zip'
-    unzip -d wcet wcet_bench.zip
-    rm -rf wcet/__MACOSX/
-
-    svn co https://svn.sosy-lab.org/software/sv-benchmarks/tags/svcomp13/
-    cp /usr/include/sys/malloc.h ${BENCH_DIR}/include/
-
-    wget 'http://git.minix3.org/?p=minix.git;a=snapshot;h=972156d595e8a959a5204e158fa8f16b99e443d4;sf=tgz' -O minix-972156d595e8a959a5204e158fa8f16b99e443d4.tar.gz
-    tar xzf minix-972156d595e8a959a5204e158fa8f16b99e443d4.tar.gz
-    cd minix
-    cd ..
-
-    wget http://ftp.gnu.org/gnu/coreutils/coreutils-8.21.tar.xz
-    tar xf coreutils-8.21.tar.xz
-    cd coreutils-8.21
-    ./configure
-    cd ..
-    echo -n "Please copy cBench15032013.tar.bz2 (from Moritz' email) to ${BENCH_DIR} [enter]"
-    read
-    tar xf cBench15032013.tar.bz2
-
-    # dependencies
-
-    wget http://www.tux.org/~ricdude/esound-0.2.8.tar.gz    # consumer_mad
-    tar xf esound-0.2.8.tar.gz
-    wget http://audiofile.68k.org/audiofile-0.3.6.tar.gz    # consumer_mad
-    tar xf audiofile-0.3.6.tar.gz
-    mkdir sys
-    wget http://people.freebsd.org/~ariff/lowlatency/soundcard.h # consumer_mad
-    mv soundcard.h sys
-
-    # office_ghostscript
-    cp /usr/include/stdio.h .
-    echo -n "\"extern int dprintf (int __fd, __const char *__restrict __fmt, ...) ...\" auskommentieren"
-    read
-    $EDITOR stdio.h
-
-    # office_ispell
-    echo -n "\"ssize_t getline(char ** __restrict, size_t * __restrict, FILE * __restrict) ...\" auskommentieren"
-    read
-    $EDITOR stdio.h
-
-    # security_pgp_d
-    echo -n "\"#undef memmove\" einfügen"
-    read
-    $EDITOR ${BENCH_DIR}/cBench15032013/security_pgp_d/src/memmove.c
-
-    # network_patricia
-    wget ftp://ftp.irisa.fr/pub/OpenBSD/src/sys/sys/endian.h
-
-    # security_pgp_d
-    cp /usr/include/sys/time.h sys
-    echo -n "\"int gettimeofday(struct timeval * __restrict, void * __restrict) ...\" auskommentieren"
-    read
-    $EDITOR sys/time.h
-
-    cd ..
-
-    exit
-fi
-
 if [[ ${BENCH} == "all" ]] ; then
-    "$0" coreutils $2 || exit $?
-    "$0" cBench $2 || exit $?
-    "$0" wcet $2 || exit $?
+    shift
+    shift
+    "$0" coreutils $@ || exit $?
+    "$0" cBench $@ || exit $?
+    "$0" wcet $@ || exit $?
     exit
 fi
 
@@ -83,45 +17,22 @@ if [[ $2 == "run" ]] ; then
         INCLUDES=-I${BENCH_DIR}/coreutils-8.21/lib/ 
         DEFINES="-DHASH_ALGO_MD5"
     elif [[ ${BENCH} == "svcomp" ]] ; then
-        FILES=$(find ${BENCH_DIR}/svcomp13/{bitvector,ddv-machzwd,heap-manipulation,ldv-regression,list-properties,locks,loops,memsafety,ntdrivers,ntdrivers-simplified,product-lines,pthread,pthread-atomic,ssh,ssh-simplified,systemc} -name '*.c')
-        # FILES=$(find ${BENCH_DIR}/svcomp13/{ldv-drivers,ldv-linux-3.4} -name '*.c')
-        INCLUDES="-I${BENCH_DIR}/include/"
+        FILES=$(cat ${BENCH_DIR}/svcomp13/*.set | sed '/^\s*$/d' | sed 's!^!'${BENCH_DIR}/svcomp13/'!')
+        # INCLUDES="-I${BENCH_DIR}/include/"
+        SLOOPY_ARGS="-ignore-infinite-loops"
     elif [[ ${BENCH} == "wcet" ]] ; then
         FILES=$(find ${BENCH_DIR}/wcet/ -not -name des.c -and -name '*.c')
     elif [[ ${BENCH} == "cBench" ]] ; then
         FILES=$(find ${BENCH_DIR}/cBench_preprocessed_2013_07_01_Merged/$3 -name '*.c')
-
-        # INCLUDES=$(find ${BENCH_DIR}/cBenchPreprocessed/ -name '*.c' | xargs -L1 dirname | sort | uniq | sed 's/^/-I/' | tr '\n' ' ')
-        # # consumer_mad
-        # INCLUDES="$INCLUDES -I${BENCH_DIR}/esound-0.2.8 -I${BENCH_DIR}/audiofile-0.3.6/libaudiofile/"
-        # # consumer_mad & office_ghostscript & network_patricia
-        # INCLUDES="$INCLUDES -I${BENCH_DIR}/include/"
-
-        # # automotive_{bitcount,qsort1}
-        # DEFINES="-DEXIT_FAILURE=1"
-        # # consumer_mad
-        # DEFINES="$DEFINES -DFPM_DEFAULT -DHAVE_CONFIG_H -DLOCALEDIR=\"/usr/local/share/locale\""
-        # # consumer_lame
-        # DEFINES="$DEFINES -DLAMESNDFILE -DHAVEMPGLIB -DLAMEPARSE"
-        # # office_stringsearch1 / security_pgp_d
-        # DEFINES="$DEFINES -DUNIX -DPORTABLE"
-        # # telecom_gsm
-        # DEFINES="$DEFINES -DSASR -DSTUPID_COMPILER -DNeedFunctionPrototypes=1"
-
-        # # security_pgp_d/src/zdeflate -> defines i386
-        # FLAGS="-m32"
     fi
     echo "BENCH\t$BENCH">$BENCH.stats
 
     ninja sloopy || exit 1
-    LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -loop-stats"
-    # LOOP_CLASSIFY_ARGS="$LOOP_CLASSIFY_ARGS -per-loop-stats"
+    SLOOPY_ARGS="$SLOOPY_ARGS -loop-stats"
     t0=`date +%s`
-    bin/sloopy $FILES ${LOOP_CLASSIFY_ARGS} -debug -bench-name "$BENCH" -- -w $INCLUDES $DEFINES $FLAGS 2>&1 >$BENCH.stats | egrep -v '^Args:'
+    bin/sloopy $FILES ${SLOOPY_ARGS} -debug -bench-name "$BENCH" -- -w $INCLUDES $DEFINES $FLAGS 2>&1 >$BENCH.stats | egrep -v '^Args:'
     t1=`date +%s`
     echo Elapsed $[$t1-$t0] >> $BENCH.stats
-    # mv loops.sql ${BENCH}.sql
-    # echo | sqlite3 -init ${BENCH}.sql ${BENCH}.db
 fi
 
 cat_bench() {
