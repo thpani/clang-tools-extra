@@ -51,6 +51,10 @@ class ControlDependenceGraph {
                                            I2 != E2; I2++) {
           const CFGBlock *B = *I2;
           if (!PD.dominates(B, A)) {
+            if (!PD.getBase().getNode(const_cast<CFGBlock*>(B))) {
+              if (IgnoreInfiniteLoops) continue;
+              llvm_unreachable(("A->B, B not in PDT (enable -" + std::string(IgnoreInfiniteLoops.ArgStr) + "?)").c_str());
+            }
             // edge A->B where B does not postdominate A
             const CFGBlock *L = PD.findNearestCommonDominator(A, B);
             assert(L);
@@ -59,13 +63,11 @@ class ControlDependenceGraph {
 
             // Walk NodeB immediate dominators chain and find common dominator node.
             llvm::DomTreeNodeBase<CFGBlock> *IDomB = PD.getBase().getNode(const_cast<CFGBlock*>(B));
-            if (IDomB == NULL) {
-              if (IgnoreInfiniteLoops) return false;
-              llvm_unreachable("infinite loop");
-            }
+            assert(IDomB);
             do {
               Map[const_cast<const CFGBlock*>(IDomB->getBlock())].push_back(A);
               IDomB = IDomB->getIDom();
+              assert(IDomB);
             }
             while (IDomB->getBlock() != AParent);
           }

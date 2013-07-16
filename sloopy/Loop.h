@@ -461,10 +461,13 @@ bool NaturalLoop::build(
   Blocks.push_back(Exit);
   Blocks.push_back(Entry);
 
-  // TODO
+  bool IntroducedHeaderExitEdge = false;
   if (Exit->pred_size() == 0) {
-    llvm::errs() << "Exit not reachable from entry!\n";
-    return false;
+    // Exit not reachable from Entry,
+    // introduce an edge Header->Exit
+    Map[Header]->Succs.insert(Exit);
+    Exit->Preds.insert(Map[Header]);
+    IntroducedHeaderExitEdge = true;
   }
 
   // reduce
@@ -476,7 +479,9 @@ bool NaturalLoop::build(
                                BI != BE; ) {
       NaturalLoopBlock *Current = *BI;
       /* std::cerr << Current->getBlockID() << "\n"; */
-      if (Current == Entry || Current == Exit) {
+      if (Current == Entry || Current == Exit ||
+          Current == Map[Header] // don't reduce the header or we will end up with no loop at all
+          ) {
         BI++;
         continue;
       }
@@ -530,7 +535,13 @@ bool NaturalLoop::build(
     }
   }
 
-  assert(Exit->pred_size() != 0);
+  if (IntroducedHeaderExitEdge) {
+    assert(Exit->Preds.size() == 1);
+    Map[Header]->Succs.erase(Map[Header]->Succs.begin());
+    Exit->Preds.erase(Exit->Preds.begin());
+    assert(Exit->Preds.size() == 0);
+  }
+
   return true;
 }
 

@@ -124,9 +124,12 @@ class IncrementClassifier : public LoopClassifier {
     std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const throw () {
       // do we have the right # of exit arcs?
       unsigned PredSize = Loop->getExit().pred_size();
-      assert(PredSize > 0);
       if (Constr.ECConstr != ANY_EXIT && PredSize != Constr.ECConstr) {
         LoopClassifier::classify(Loop, Constr.str(), Marker, "WrongExitArcs", false);
+        return std::set<IncrementLoopInfo>();
+      }
+      if (PredSize == 0) {
+        LoopClassifier::classify(Loop, Constr.str(), Marker, "NoExitArcs", false);
         return std::set<IncrementLoopInfo>();
       }
 
