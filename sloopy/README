@@ -1,0 +1,67 @@
+Sloopy
+======
+
+Sloopy is a simple analysis tool for loops in C programs.
+
+Building
+--------
+
+Sloopy is implemented as a standalone tool based on Clang (via LibTooling).  
+As such, it needs to be built against the whole LLVM + Clang source tree.  
+While there are many ways to build Clang, we encourage you to use `git`+`cmake`+`ninja`:
+
+### Checkout the source tree
+
+Create a base dir that will contain `llvm` (sources) and `llvm-build` (binaries and build artifacts):
+
+    $ mkdir your/build/dir
+    $ cd your/build/dir
+
+Checkout LLVM:
+    
+    $ git clone http://llvm.org/git/llvm.git
+    
+Checkout Clang (Sloopy needs a patched Clang):
+
+    $ cd llvm/tools/
+    $ git clone https://github.com/thpani/clang
+
+Checkout clang-tools-extra (where Sloopy lives):
+
+    $ cd clang/tools/
+    $ git clone git@github.com:thpani/clang-tools-extra.git extra
+
+### Dependencies
+
+Sloopy has the following additional dependencies:
+
+ - [Boost](http://www.boost.org/)
+ - [GraphViz](http://www.graphviz.org/) [*optional*], if you want to render CFGs
+
+### Building
+
+Sloopy uses C++11 features. As C++11 causes ABI changes, we build the whole source tree with `-std=c++11`.  
+We recommend building Sloopy with Clang (s. below).
+
+    $ cd your/build/dir
+    $ mkdir llvm-build
+    $ cd llvm-build
+    $ cmake -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-std=c++11 -Wno-c++11-extensions" ../llvm/
+    $ ninja
+
+If you want to build using a different compiler (e.g. the Clang/LLVM toolchain just built):
+
+    $ CC=bin/clang CXX=bin/clang++ cmake ...
+
+If you want to save memory / processor time and only need sloopy (i.e. not the full toolchain):
+
+    $ ninja sloopy
+
+
+Running
+-------
+
+    $ cd your/build/dir
+    $ cd llvm-build
+    $ bin/sloopy -help
+
