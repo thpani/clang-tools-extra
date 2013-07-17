@@ -32,6 +32,7 @@ if [[ $2 == "run" ]] ; then
     t0=`date +%s`
     bin/sloopy $FILES ${SLOOPY_ARGS} -debug -bench-name "$BENCH" -- -w $INCLUDES $DEFINES $FLAGS 2>&1 >$BENCH.stats | egrep -v '^Args:'
     t1=`date +%s`
+    echo Elapsed $[$t1-$t0]
     echo Elapsed $[$t1-$t0] >> $BENCH.stats
 fi
 
