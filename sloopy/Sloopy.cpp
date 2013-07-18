@@ -36,23 +36,22 @@ using namespace sloopy;
 int main(int argc, const char **argv) {
   llvm::sys::PrintStackTraceOnErrorSignal();
 
-  /* ----- Parse options ----- */
-
-  // This causes options to be parsed.
+  // parse options
   CommonOptionsParser OptionsParser(argc, argv);
 
-  RefactoringTool Tool(OptionsParser.getCompilations(),
-                       OptionsParser.getSourcePathList());
+  // setup clang tool
+  ClangTool Tool(OptionsParser.getCompilations(),
+                 OptionsParser.getSourcePathList());
   MatchFinder Finder;
-
   FunctionCallback FC;
   Finder.addMatcher(FunctionMatcher, &FC);
 
+  // run
   if (Tool.run(newFrontendActionFactory(&Finder)) != 0) {
     return 1;
   }
 
-  /* ----- Print stats ----- */
+  // print statistics
   if (LoopStats) {
     llvm::errs() << "Preparing statistics...\n";
     std::string Filename("classifications_"+BenchName+".txt");
