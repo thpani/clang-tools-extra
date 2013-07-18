@@ -49,9 +49,9 @@ class NaturalLoop {
     std::list<NaturalLoopBlock*> Blocks;
     std::set<const VarDecl*> ControlVars;
     std::set<const CFGBlock*> Tails;
-    Stmt *LoopStmt;
+    const Stmt *LoopStmt;
     std::string Identifier;
-    NaturalLoop *Unsliced;
+    const NaturalLoop *Unsliced;
   public:
     ~NaturalLoop();
     bool build(
@@ -138,7 +138,6 @@ class NaturalLoop {
     }
     unsigned size() const { return Blocks.size(); }
 
-    Stmt *getLoopStmt() { return LoopStmt; }
     const Stmt *getLoopStmt() const { return LoopStmt; }
     
     const NaturalLoop *getUnsliced() const {
@@ -148,19 +147,12 @@ class NaturalLoop {
     std::string getLoopStmtMarker() const {
       switch (LoopStmt->getStmtClass()) {
         case Stmt::ForStmtClass:
-          return "FOR";
         case Stmt::WhileStmtClass:
-          return "WHILE";
         case Stmt::DoStmtClass:
-          return "DO";
         case Stmt::GotoStmtClass:
-          return "GOTO";
-        case Stmt::IfStmtClass:
-          return "IF";
-        case Stmt::ContinueStmtClass:
-          return "CONTINUE";
-        case Stmt::SwitchStmtClass:
-          return "SWITCH";
+          return LoopStmt->getStmtClassName();
+        case Stmt::LabelStmtClass:
+          return "UnstructuredFlow";
         default:
           llvm_unreachable("Unknown loop stmt.");
       }
@@ -192,6 +184,9 @@ class NaturalLoop {
               S = CStmt->getStmt();
               break;
             }
+          }
+          if (!S) {
+            S = Tail->getLabel();
           }
         }
         assert(S);
@@ -389,37 +384,22 @@ bool NaturalLoop::build(
   Exit = new NaturalLoopBlock(0);
   this->Tails = Tails;
   this->ControlVars = ControlVars;
-  this->Unsliced = const_cast<NaturalLoop*>(Unsliced);
+  this->Unsliced = Unsliced;
 
   const CFGBlock *Tail = *Tails.begin();
   // FOR, WHILE, DO-WHILE
-  LoopStmt = const_cast<Stmt*>(Tail->getLoopTarget());
+  LoopStmt = Tail->getLoopTarget();
   if (!LoopStmt) {
-    unsigned nonGotoBlocks = 0;
     for (const CFGBlock *Tail : Tails) {
       if (const GotoStmt *GS = dyn_cast_or_null<GotoStmt>(Tail->getTerminator().getStmt())) {
-      LoopStmt = const_cast<GotoStmt*>(GS);
+        LoopStmt = GS;
       } else {
-        nonGotoBlocks++;
+        LoopStmt = Header->getLabel();
+        break;
       }
     }
-    assert(nonGotoBlocks <= 1);
-    // GOTO
-    /* } else if (dyn_cast_or_null<IfStmt>(Header->getTerminator().getStmt())) { */
-    /*   // IF */
-    /*   /1* for (auto T : Tails) { *1/ */
-    /*   /1*   llvm::errs() << T->getBlockID(); *1/ */
-    /*   /1*   llvm::errs() << " "; *1/ */
-    /*   /1* } *1/ */
-    /*   /1* llvm::errs() << "\n"; *1/ */
-    /*   Header->getParent()->viewCFG(LangOptions()); */
-    /*   assert(Tails.size() == 1); */
-    /*   LoopStmt = const_cast<Stmt*>(Header->getTerminator().getStmt()); */
-    /* } */
   }
-  if (!LoopStmt) {
-    llvm_unreachable("No loop stmt!");
-  }
+  assert(LoopStmt && "No loop stmt!");
 
   std::map<const CFGBlock*, NaturalLoopBlock*> Map;
 
