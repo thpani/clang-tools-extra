@@ -65,3 +65,10 @@ Running
     $ cd llvm-build
     $ bin/sloopy -help
 
+If you need to pass options to `cc1`, do so after the double dash:
+
+    $ bin/sloopy ... -- -target x86_64
+
+You can check the final invocation by passing `-v`:
+
+    $ bin/sloopy ... -- -v

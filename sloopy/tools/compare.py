@@ -13,7 +13,7 @@ sloopy_classifications = defaultdict(lambda: defaultdict(lambda: defaultdict(dic
 sloopy_classificationsb = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
 
 if sys.argv[1] == 'cBench':
-    SLOOPY_ABS_START = '/home/thomas/src/da/llvm-build/bench/cBench_preprocessed_2013_07_01_Merged/'
+    SLOOPY_ABS_START = '/Users/thomas/Documents/uni/da/llvm-build/bench/cBench_preprocessed_2013_07_01_Merged/'
     SLOOPY_FILE = 'classifications_cBench.txt'
     LLVM_ABS_START = '/files/sinn/cBenchPreprocessed/'
     LLVM_FILE = 'bench/cBench_preprocessed_2013_07_01_Merged_summary.txt'

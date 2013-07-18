@@ -17,9 +17,15 @@ if [[ $2 == "run" ]] ; then
         INCLUDES=-I${BENCH_DIR}/coreutils-8.21/lib/ 
         DEFINES="-DHASH_ALGO_MD5"
     elif [[ ${BENCH} == "svcomp" ]] ; then
-        FILES=$(cat ${BENCH_DIR}/svcomp13/*.set | sed '/^\s*$/d' | sed 's!^!'${BENCH_DIR}/svcomp13/'!')
-        # INCLUDES="-I${BENCH_DIR}/include/"
+        if [[ -z $3 ]] ; then
+            for set in $(find bench -name 'DeviceDrivers64.set' | xargs basename -s .set) ; do
+                $0 svcomp run $set
+            done
+            exit
+        fi
+        FILES=$(cat ${BENCH_DIR}/svcomp13/$3.set | sed '/^\s*$/d' | sed 's!^!'${BENCH_DIR}/svcomp13/'!')
         SLOOPY_ARGS="-ignore-infinite-loops"
+        CC1_ARGS="-target x86_64"
     elif [[ ${BENCH} == "wcet" ]] ; then
         FILES=$(find ${BENCH_DIR}/wcet/ -not -name des.c -and -name '*.c')
     elif [[ ${BENCH} == "cBench" ]] ; then
@@ -30,7 +36,8 @@ if [[ $2 == "run" ]] ; then
     ninja sloopy || exit 1
     SLOOPY_ARGS="$SLOOPY_ARGS -loop-stats"
     t0=`date +%s`
-    bin/sloopy $FILES ${SLOOPY_ARGS} -debug -bench-name "$BENCH" -- -w $INCLUDES $DEFINES $FLAGS 2>&1 >$BENCH.stats | egrep -v '^Args:'
+    [[ -z $3 ]] && BENCH_NAME="${BENCH}" || BENCH_NAME="${BENCH}_${3}"
+    bin/sloopy $FILES ${SLOOPY_ARGS} -debug -bench-name "$BENCH_NAME" -- -w $INCLUDES $DEFINES $CC1_ARGS 2>&1 >$BENCH.stats | egrep -v '^Args:'
     t1=`date +%s`
     echo Elapsed $[$t1-$t0]
     echo Elapsed $[$t1-$t0] >> $BENCH.stats
