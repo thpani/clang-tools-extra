@@ -52,8 +52,8 @@ class ControlDependenceGraph {
           const CFGBlock *B = *I2;
           if (!PD.dominates(B, A)) {
             if (!PD.getBase().getNode(const_cast<CFGBlock*>(B))) {
-              if (IgnoreInfiniteLoops) continue;
-              llvm_unreachable(("A->B, B not in PDT (enable -" + std::string(IgnoreInfiniteLoops.ArgStr) + "?)").c_str());
+              if (AllowInfiniteLoops) continue;
+              llvm_unreachable(("A->B, B not in PDT (enable -" + std::string(AllowInfiniteLoops.ArgStr) + "?)").c_str());
             }
             // edge A->B where B does not postdominate A
             const CFGBlock *L = PD.findNearestCommonDominator(A, B);
@@ -551,7 +551,7 @@ class FunctionCallback : public MatchFinder::MatchCallback {
       }
 
       for (auto &MLD : LoopsAfterMerging) {
-        const NaturalLoop *Unsliced = M[MLD][0];
+        /* const NaturalLoop *Unsliced = M[MLD][0]; */
         const NaturalLoop *SlicedAllLoops = M[MLD][1];
         const NaturalLoop *SlicedOuterLoop = M[MLD][2];
         delete SlicedAllLoops;
