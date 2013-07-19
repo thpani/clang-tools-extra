@@ -47,9 +47,8 @@ int main(int argc, const char **argv) {
   Finder.addMatcher(FunctionMatcher, &FC);
 
   // run
-  if (Tool.run(newFrontendActionFactory(&Finder)) != 0) {
-    return 1;
-  }
+  unsigned ret = Tool.run(newFrontendActionFactory(&Finder));
+  /* we continue even if sloopy failed on some file */
 
   // print statistics
   if (LoopStats) {
@@ -61,5 +60,5 @@ int main(int argc, const char **argv) {
     ostream.close();
   }
 
-  return 0;
+  return ret;
 }
