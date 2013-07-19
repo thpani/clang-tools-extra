@@ -147,10 +147,13 @@ class NaturalLoop {
     std::string getLoopStmtMarker() const {
       switch (LoopStmt->getStmtClass()) {
         case Stmt::ForStmtClass:
+          return "FOR";
         case Stmt::WhileStmtClass:
+          return "WHILE";
         case Stmt::DoStmtClass:
+          return "DO";
         case Stmt::GotoStmtClass:
-          return LoopStmt->getStmtClassName();
+          return "GOTO";
         case Stmt::LabelStmtClass:
           return "UnstructuredFlow";
         default:
