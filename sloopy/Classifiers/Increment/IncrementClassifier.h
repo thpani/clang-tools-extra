@@ -51,9 +51,8 @@ class IncrementClassifier : public LoopClassifier {
         }
       }
     }
-
-
-    void checkBody(const NaturalLoop *L, const IncrementInfo I) const throw (checkerror) {
+    
+    unsigned checkDataFlow(const NaturalLoop *L, const IncrementInfo I) const {
       const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
 
       // Initialize all blocks
@@ -76,13 +75,14 @@ class IncrementClassifier : public LoopClassifier {
         // for each basic block other than entry
         for (auto Block : *L) {   // (4)
 
-          // propagate OUT -> IN
-          unsigned max = std::numeric_limits<unsigned>::min();
+          // meet (propagate OUT -> IN)
+          unsigned max = 0;
           for (NaturalLoopBlock::const_pred_iterator P = Block->pred_begin(),
                                                      E = Block->pred_end();
                                                      P != E; P++) {    // (5)
             const NaturalLoopBlock *Pred = *P;
-            if (Out[Pred] > max) {
+            auto compare = std::greater<unsigned>();
+            if (compare(Out[Pred], max)) {
               max = Out[Pred];
             }
           }
@@ -102,10 +102,15 @@ class IncrementClassifier : public LoopClassifier {
         }
       }
 
-      /* llvm::errs() << "Header " << In[Header] << "\n"; */
-      if (In[Header] < 1)
+      return In[Header];
+    }
+
+    void checkBody(const NaturalLoop *L, const IncrementInfo I) const throw (checkerror) {
+      unsigned Result = checkDataFlow(L, I);
+
+      if (Result < 1)
           throw checkerror("ASSIGNED_NotAllPaths");
-      if (In[Header] > 1)
+      if (Result > 1)
           throw checkerror("ASSIGNED_Twice");
     }
 
