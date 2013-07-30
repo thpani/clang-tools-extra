@@ -1,5 +1,6 @@
 #pragma once
 
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/GraphWriter.h"
 #include "clang/AST/PrettyPrinter.h"
@@ -444,13 +445,15 @@ bool NaturalLoop::build(
   Blocks.push_back(Exit);
   Blocks.push_back(Entry);
 
-  bool IntroducedHeaderExitEdge = false;
+  /* bool IntroducedHeaderExitEdge = false; */
   if (Exit->pred_size() == 0) {
     // Exit not reachable from Entry,
     // introduce an edge Header->Exit
-    Map[Header]->Succs.insert(Exit);
-    Exit->Preds.insert(Map[Header]);
-    IntroducedHeaderExitEdge = true;
+    /* Map[Header]->Succs.insert(Exit); */
+    /* Exit->Preds.insert(Map[Header]); */
+    /* IntroducedHeaderExitEdge = true; */
+    DEBUG(llvm::errs() << "Ignoring infinite loop.\n");
+    return false;
   }
 
   // reduce
@@ -518,12 +521,12 @@ bool NaturalLoop::build(
     }
   }
 
-  if (IntroducedHeaderExitEdge) {
-    assert(Exit->Preds.size() == 1);
-    Map[Header]->Succs.erase(Map[Header]->Succs.begin());
-    Exit->Preds.erase(Exit->Preds.begin());
-    assert(Exit->Preds.size() == 0);
-  }
+/*   if (IntroducedHeaderExitEdge) { */
+/*     assert(Exit->Preds.size() == 1); */
+/*     Map[Header]->Succs.erase(Map[Header]->Succs.begin()); */
+/*     Exit->Preds.erase(Exit->Preds.begin()); */
+/*     assert(Exit->Preds.size() == 0); */
+/*   } */
 
   return true;
 }

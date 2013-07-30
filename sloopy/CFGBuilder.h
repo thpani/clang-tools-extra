@@ -36,12 +36,16 @@ class PostDominatorTree : public DominatorTree {
 
 // Ferrante, Ottenstein, Warren 1987
 class ControlDependenceGraph {
+  std::map<const CFGBlock*, std::vector<const CFGBlock*>> CDAdj;
+
   public:
-    bool buildControlDependenceGraph(AnalysisDeclContext &AC) {
+    bool buildControlDependenceSubgraph(AnalysisDeclContext &AC) {
+      // obtain postdom tree
       CFG *CFG = AC.getCFG();
       PostDominatorTree PD;
       PD.buildDominatorTree(AC);
 
+      // foreach edge A->B
       for (CFG::const_iterator I = CFG->begin(),
                                E = CFG->end();
                                I != E; I++) {
@@ -51,23 +55,25 @@ class ControlDependenceGraph {
                                            I2 != E2; I2++) {
           const CFGBlock *B = *I2;
           if (!PD.dominates(B, A)) {
+            // edge A->B where B does not postdominate A
             if (!PD.getBase().getNode(const_cast<CFGBlock*>(B))) {
               if (AllowInfiniteLoops) continue;
               llvm_unreachable(("A->B, B not in PDT (enable -" + std::string(AllowInfiniteLoops.ArgStr) + "?)").c_str());
             }
-            // edge A->B where B does not postdominate A
+            // find least common dominator
             const CFGBlock *L = PD.findNearestCommonDominator(A, B);
-            assert(L);
+            assert(L && "could not obtain least common dominator");
+            // FOW'87 p325
             CFGBlock *AParent = PD.getBase().getNode(const_cast<CFGBlock*>(A))->getIDom()->getBlock();
-            assert(L == A || L == AParent);
+            assert((L == A || L == AParent) && "L is neither A nor A's parent");
 
-            // Walk NodeB immediate dominators chain and find common dominator node.
+            // traverse backwards from B until we reach A's parent,
+            // marking all nodes before A's parent control dependent on A
             llvm::DomTreeNodeBase<CFGBlock> *IDomB = PD.getBase().getNode(const_cast<CFGBlock*>(B));
-            assert(IDomB);
             do {
-              Map[const_cast<const CFGBlock*>(IDomB->getBlock())].push_back(A);
+              const CFGBlock *X = IDomB->getBlock();
+              CDAdj[X].push_back(A);
               IDomB = IDomB->getIDom();
-              assert(IDomB);
             }
             while (IDomB->getBlock() != AParent);
           }
@@ -77,10 +83,11 @@ class ControlDependenceGraph {
     }
 
     bool dependsOn(const CFGBlock *A, const CFGBlock *B) const {
-      auto I = Map.find(A);
-      if (I != Map.end()) {
-        for (auto Dep : I->second) {
-          if (Dep == B || dependsOn(Dep, B)) return true;
+      if (CDAdj.find(A) == CDAdj.end())
+        return false;
+      for (auto Dep : CDAdj.at(A)) {
+        if (Dep == B || dependsOn(Dep, B)) {
+          return true;
         }
       }
       return false;
@@ -89,26 +96,23 @@ class ControlDependenceGraph {
     std::set<const CFGBlock *> dependsOn(const CFGBlock *A) const {
       std::set<const CFGBlock *> Result;
       std::stack<const CFGBlock*> Worklist;
+      // DFS from A
       Worklist.push(A);
       while (Worklist.size()) {
         const CFGBlock *Current = Worklist.top();
         Worklist.pop();
 
-        auto I = Map.find(Current);
-        if (I != Map.end()) {
-          for (auto Dep : I->second) {
-            bool Inserted = Result.insert(Dep).second;
-            if (Inserted) {
-              Worklist.push(Dep);
-            }
+        if (CDAdj.find(Current) == CDAdj.end())
+          continue;
+        for (auto Dep : CDAdj.at(Current)) {
+          bool Inserted = Result.insert(Dep).second;
+          if (Inserted) {
+            Worklist.push(Dep);
           }
         }
       }
       return Result;
     }
-
-  private:
-    std::map<const CFGBlock*, std::vector<const CFGBlock*>> Map;
 };
 
 static bool isTransitionBlock(const CFGBlock *Block) {
@@ -259,7 +263,7 @@ static const NaturalLoop *buildNaturalLoop(
   if (Sliced->build(Header, Tails, Body, ControlVars, &TrackedStmts, &TrackedBlocks, Unsliced)) {
     return Sliced;
   }
-
+  delete Sliced;
   return NULL;
 }
 
@@ -274,6 +278,7 @@ static const NaturalLoop *buildNaturalLoop(
   if (Unsliced->build(Header, Tails, Body, ControlVars)) {
     return Unsliced;
   }
+  delete Unsliced;
   return NULL;
 }
 
@@ -346,7 +351,7 @@ class FunctionCallback : public MatchFinder::MatchCallback {
 
       ControlDependenceGraph CDG;
       // only for SV-COMP
-      if (!CDG.buildControlDependenceGraph(*AC)) return;
+      if (!CDG.buildControlDependenceSubgraph(*AC)) return;
 
       DominatorTree Dom;
       Dom.buildDominatorTree(*AC);
@@ -467,7 +472,8 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         Context = Result.Context;
         C.reset(new Classifier(Result.Context));
       }
-      for (auto &MLD : LoopsAfterMerging) {
+      for (auto Pair : M) {
+        auto MLD = Pair.first;
         const NaturalLoop *Unsliced = M[MLD][0];
         const NaturalLoop *SlicedAllLoops = M[MLD][1];
         const NaturalLoop *SlicedOuterLoop = M[MLD][2];
@@ -531,7 +537,8 @@ class FunctionCallback : public MatchFinder::MatchCallback {
 
       // InfluencesOuter is only classified when we reach the outer loop,
       // so we have to loop once again to show all classes.
-      for (auto &MLD : LoopsAfterMerging) {
+      for (auto Pair : M) {
+        auto MLD = Pair.first;
         const NaturalLoop *Unsliced = M[MLD][0];
         auto LocationPair = Unsliced->getLoopStmtLocation(Result.SourceManager);
         PresumedLoc PL = LocationPair.first;
@@ -550,7 +557,8 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         }
       }
 
-      for (auto &MLD : LoopsAfterMerging) {
+      for (auto Pair : M) {
+        auto MLD = Pair.first;
         /* const NaturalLoop *Unsliced = M[MLD][0]; */
         const NaturalLoop *SlicedAllLoops = M[MLD][1];
         const NaturalLoop *SlicedOuterLoop = M[MLD][2];
