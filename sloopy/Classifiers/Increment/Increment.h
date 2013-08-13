@@ -6,7 +6,7 @@
 
 class IntegerIterClassifier : public IncrementClassifier {
   protected:
-    IncrementInfo getIncrementInfo(const Stmt *Stmt) const throw (checkerror) {
+    boost::variant<std::string, IncrementInfo> getIncrementInfo(const Stmt *Stmt) const throw () {
       return ::getIncrementInfo(Stmt, Marker, Context, &isIntegerType);
     }
 
@@ -20,7 +20,7 @@ class IntegerIterClassifier : public IncrementClassifier {
 
 class PArrayIterClassifier : public IncrementClassifier {
   protected:
-    IncrementInfo getIncrementInfo(const Stmt *Stmt) const throw (checkerror) {
+    boost::variant<std::string, IncrementInfo> getIncrementInfo(const Stmt *Stmt) const throw () {
       return ::getIncrementInfo(Stmt, Marker, Context, &isPointerType);
     }
 
@@ -34,34 +34,35 @@ class PArrayIterClassifier : public IncrementClassifier {
 
 class DataIterClassifier : public IncrementClassifier {
   protected:
-    IncrementInfo getIncrementInfo(const Stmt *Stmt) const throw (checkerror) {
-      if (Stmt == NULL) throw checkerror("Inc_None");
+    boost::variant<std::string, IncrementInfo> getIncrementInfo(const Stmt *Stmt) const throw () {
+      if (Stmt == NULL) return "Inc_None";
       const Expr *E = dyn_cast<Expr>(Stmt);
-      if (E == NULL) throw checkerror("Inc_NotExpr");
+      if (E == NULL) return "Inc_NotExpr";
       const Expr *Expression = E->IgnoreParenCasts();
       const BinaryOperator *BO;
       if (!(BO = dyn_cast<BinaryOperator>(Expression))) {
-        throw checkerror("Inc_NotBinary");
+        return "Inc_NotBinary";
       }
       const VarDecl *IncVar;
       if (!(IncVar = getVariable(BO->getLHS()))) {
-        throw checkerror("Inc_LHSNoVar");
+        return "Inc_LHSNoVar";
       }
       if (!(*IncVar->getType()).isPointerType()) {
-        throw checkerror("Inc_LHSNoPtr");
+        return "Inc_LHSNoPtr";
       }
       const MemberExpr *RHS;
       if (!(RHS = dyn_cast<MemberExpr>(BO->getRHS()->IgnoreParenCasts()))) {
-        throw checkerror("Inc_RHSNoMemberExpr");
+        return "Inc_RHSNoMemberExpr";
       }
       const VarDecl *Base;
       if (!(Base = getVariable(RHS->getBase()))) {
-        throw checkerror("Inc_RHSBaseNoVar");
+        return "Inc_RHSBaseNoVar";
       }
       if (Base != IncVar) {
-        throw checkerror("Inc_RHSBaseNeqInc");
+        return "Inc_RHSBaseNeqInc";
       }
-      return { IncVar, BO, VarDeclIntPair() };
+      IncrementInfo Result = { IncVar, BO, VarDeclIntPair() };
+      return Result;
     }
 
     std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
@@ -75,7 +76,7 @@ class DataIterClassifier : public IncrementClassifier {
 
 class AArrayIterClassifier : public IncrementClassifier {
   protected:
-    IncrementInfo getIncrementInfo(const Stmt *Stmt) const throw (checkerror) {
+    boost::variant<std::string, IncrementInfo> getIncrementInfo(const Stmt *Stmt) const throw () {
       return ::getIncrementInfo(Stmt, Marker, Context, &isIntegerType);
     }
 

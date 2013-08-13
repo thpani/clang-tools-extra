@@ -55,16 +55,16 @@ static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
       const VarDecl *RHS = getTypeVariable(ConditionOp->getRHS(), TypePredicate);
       // see if LHS/RHS is (integer var)++
       if (LHS == NULL) {
-        try {
-          IncrementInfo I = ::getIncrementInfo(ConditionOp->getLHS(), Marker, Context, TypePredicate);
-          LHS = I.VD;
-        } catch(checkerror) {}
+        auto I = ::getIncrementInfo(ConditionOp->getLHS(), Marker, Context, TypePredicate);
+        if (I.which() == 1) {
+          LHS = boost::get<IncrementInfo>(I).VD;
+        }
       }
       if (RHS == NULL) {
-        try {
-          IncrementInfo I = ::getIncrementInfo(ConditionOp->getRHS(), Marker, Context, TypePredicate);
-          RHS = I.VD;
-        } catch(checkerror) {}
+        auto I = ::getIncrementInfo(ConditionOp->getRHS(), Marker, Context, TypePredicate);
+        if (I.which() == 1) {
+          RHS = boost::get<IncrementInfo>(I).VD;
+        }
       }
 
       /* determine which is loop var, which is bound */

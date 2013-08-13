@@ -46,13 +46,14 @@ class AmortizedTypeAClassifier : public LoopClassifier {
       }
 
       bool VisitExpr(Expr *Expr) {
-        try {
-          IncrementInfo OuterIncr = ::getIncrementInfo(Expr, "", Context, &isIntegerType);
+        auto I = ::getIncrementInfo(Expr, "", Context, &isIntegerType);
+        if (I.which() == 1) {
+          auto OuterIncr = boost::get<IncrementInfo>(I);
           if (OuterIncr.VD == IncrementVD) {
             IsVarIncremented = true;
             return false;
           }
-        } catch (checkerror) {}
+        }
         return true;
       }
 

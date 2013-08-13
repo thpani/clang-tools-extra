@@ -3,17 +3,18 @@
 #include "ADT.h"
 #include "Helpers.h"
 
-static IncrementInfo getIncrementInfo(const Stmt *Stmt, const std::string Marker, const ASTContext *Context, const TypePredicate TypePredicate) throw(checkerror) {
-  if (Stmt == NULL) throw checkerror("Inc_None");
+static boost::variant<std::string, IncrementInfo> getIncrementInfo(const Stmt *Stmt, const std::string Marker, const ASTContext *Context, const TypePredicate TypePredicate) throw() {
+  if (Stmt == NULL) return "Inc_None";
   const Expr *E = dyn_cast<Expr>(Stmt);
-  if (E == NULL) throw checkerror("Inc_NotExpr");
+  if (E == NULL) return "Inc_NotExpr";
   const Expr *Expression = E->IgnoreParenCasts();
   if (const UnaryOperator *UOP = dyn_cast<UnaryOperator>(Expression)) {
     // i{++,--}
     if (UOP->isIncrementDecrementOp()) {
       if (const VarDecl *VD = getVariable(UOP->getSubExpr())) {
         if (TypePredicate(VD)) {
-          return { VD, UOP, VarDeclIntPair(llvm::APInt(2, UOP->isIncrementOp() ? 1 : -1, true)) };
+          IncrementInfo Result = { VD, UOP, VarDeclIntPair(llvm::APInt(2, UOP->isIncrementOp() ? 1 : -1, true)) };
+          return Result;
         }
       }
     }
@@ -29,17 +30,21 @@ static IncrementInfo getIncrementInfo(const Stmt *Stmt, const std::string Marker
               const VarDecl *RRHS = getVariable(RHS->getRHS());
               const VarDecl *RLHS = getVariable(RHS->getLHS());
               if (RRHS == VD && isIntegerConstant(RHS->getLHS(), Context)) {
-                return { VD, BOP, VarDeclIntPair(getIntegerConstant(RHS->getLHS(), Context)) };
+                IncrementInfo Result = { VD, BOP, VarDeclIntPair(getIntegerConstant(RHS->getLHS(), Context)) };
+                return Result;
               }
               if (RLHS == VD && isIntegerConstant(RHS->getRHS(), Context)) {
-                return { VD, BOP, VarDeclIntPair(getIntegerConstant(RHS->getRHS(), Context)) };
+                IncrementInfo Result = { VD, BOP, VarDeclIntPair(getIntegerConstant(RHS->getRHS(), Context)) };
+                return Result;
               }
               const VarDecl *Increment;
               if (RRHS == VD && (Increment = getIntegerVariable(RHS->getLHS()))) {
-                return { VD, BOP, Increment };
+                IncrementInfo Result = { VD, BOP, Increment };
+                return Result;
               }
               if (RLHS == VD && (Increment = getIntegerVariable(RHS->getRHS()))) {
-                return { VD, BOP, Increment };
+                IncrementInfo Result = { VD, BOP, Increment };
+                return Result;
               }
             }
           }
@@ -52,14 +57,16 @@ static IncrementInfo getIncrementInfo(const Stmt *Stmt, const std::string Marker
       if (const VarDecl *VD = getVariable(BOP->getLHS())) {
         if (TypePredicate(VD)) {
           if (isIntegerConstant(BOP->getRHS(), Context)) {
-            return { VD, BOP, VarDeclIntPair(getIntegerConstant(BOP->getRHS(), Context)) };
+            IncrementInfo Result = { VD, BOP, VarDeclIntPair(getIntegerConstant(BOP->getRHS(), Context)) };
+            return Result;
           }
           else if (const VarDecl *Delta = getIntegerVariable(BOP->getRHS())) {
-            return { VD, BOP, VarDeclIntPair(Delta) };
+            IncrementInfo Result = { VD, BOP, VarDeclIntPair(Delta) };
+            return Result;
           }
         }
       }
     }
   }
-  throw checkerror("Inc_NotValid");
+  return "Inc_NotValid";
 }

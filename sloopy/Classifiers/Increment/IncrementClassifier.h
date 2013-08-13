@@ -44,10 +44,10 @@ class IncrementClassifier : public LoopClassifier {
         }
 
         bool VisitExpr(Expr *Expr) {
-          try {
-            const IncrementInfo I = Outer->getIncrementInfo(Expr);
-            LoopVarCandidates.push_back(I);
-          } catch(checkerror) {}
+          auto I = Outer->getIncrementInfo(Expr);
+          if (I.which() == 1) {
+            LoopVarCandidates.push_back(boost::get<IncrementInfo>(I));
+          }
           return true;
         }
 
@@ -58,6 +58,7 @@ class IncrementClassifier : public LoopClassifier {
 
     class InvariantVarFinder : public RecursiveASTVisitor<InvariantVarFinder> {
       const NaturalLoop * const Loop;
+      std::map<const VarDecl*, std::vector<const Stmt*>> NonInvStmts;
       std::set<const VarDecl*> Variables, NonInv, Inv;
       bool AnalysisRun = false;
 
@@ -78,6 +79,8 @@ class IncrementClassifier : public LoopClassifier {
             for (const VarDecl *VD : Variables) {
               if (A.isDef(VD)) {
                 NonInv.insert(VD);
+                auto Defs = A.getDefiningStmts(VD);
+                NonInvStmts[VD].insert(NonInvStmts[VD].end(), Defs.begin(), Defs.end());
               }
             }
           }
@@ -86,6 +89,8 @@ class IncrementClassifier : public LoopClassifier {
             for (const VarDecl *VD : Variables) {
               if (A.isDef(VD)) {
                 NonInv.insert(VD);
+                auto Defs = A.getDefiningStmts(VD);
+                NonInvStmts[VD].insert(NonInvStmts[VD].end(), Defs.begin(), Defs.end());
               }
             }
           }
@@ -108,6 +113,16 @@ class IncrementClassifier : public LoopClassifier {
         bool isInvariant(const VarDecl *VD) {
           if (!AnalysisRun) RunAnalysis();
           return Inv.count(VD) > 0;
+        }
+
+        typedef std::vector<const Stmt*>::iterator def_stmt_iter;
+        def_stmt_iter def_stmt_begin(const VarDecl* VD) {
+          if (!AnalysisRun) RunAnalysis();
+          return NonInvStmts[VD].begin();
+        }
+        def_stmt_iter def_stmt_end(const VarDecl* VD) {
+          if (!AnalysisRun) RunAnalysis();
+          return NonInvStmts[VD].end();
         }
     };
 
@@ -365,7 +380,7 @@ class IncrementClassifier : public LoopClassifier {
     const std::string Marker;
     const ASTContext *Context;
 
-    virtual IncrementInfo getIncrementInfo(const Stmt *Stmt) const throw (checkerror) = 0;
+    virtual boost::variant<std::string,IncrementInfo> getIncrementInfo(const Stmt *Stmt) const throw () = 0;
     virtual std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo I) const throw (checkerror) = 0;
 
   public:
@@ -380,17 +395,41 @@ class IncrementClassifier : public LoopClassifier {
       const std::set<IncrementInfo> LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
       std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks;
 
+      InvariantVarFinder F(Loop);
+
       // restrict loop var candidates to those incremented on each path
       std::set<IncrementInfo> LoopVarCandidatesEachPath;
       for (const IncrementInfo I : LoopVarCandidates) {
         auto MaxMin = checkBody(Loop, I);
-        if (MaxMin.MinAssignments >= 1) {
-          // there are >= 1 assignments on each path
-          LoopVarCandidatesEachPath.insert(I);
+        if (MaxMin.MinAssignments < 1) {
+          // there must be >= 1 assignments on each path
+          continue;
         }
+        bool iAssignedOutsideIncrement = false;
+        for (InvariantVarFinder::def_stmt_iter P = F.def_stmt_begin(I.VD),
+                                               E = F.def_stmt_begin(I.VD);
+                                               P != E; P++) {
+          const Stmt* S = *P;
+
+          bool sIsIncrement = false;
+          for (const IncrementInfo J : LoopVarCandidates) {
+            if (J.VD == I.VD and S == J.Statement) {
+              sIsIncrement = true;
+              break;
+            }
+          }
+
+          if (not sIsIncrement) {
+            iAssignedOutsideIncrement = true;
+            break;
+          }
+        }
+        if (iAssignedOutsideIncrement) {
+          continue;
+        }
+        LoopVarCandidatesEachPath.insert(I);
       }
 
-      InvariantVarFinder F(Loop);
       bool AssumptionMade = false;
       // find provably terminating blocks
       for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
