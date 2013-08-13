@@ -34,6 +34,8 @@ class Classifier {
         const NaturalLoop *OutermostNestingLoop,
         const std::vector<const NaturalLoop*> NestingLoops,
         const std::vector<const NaturalLoop*> ProperlyNestedLoops) const {
+      time_t Begin = time(NULL);
+
       // ANY + Stmt
       ALC.classify(SlicedAllLoops);
 
@@ -74,18 +76,22 @@ class Classifier {
 
       // Influence
 
-      ATA2C.classify(MasterC, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
-      ATAC.classify(MasterC, MultiExit, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
-      /* Make sure to pass Unsliced!!!
-      * MultiExitNoCond classifier needs the Unsliced CFG to find all increments!
-      */
-      WeakATAC.classify(MasterC, MultiExitNoCond, Unsliced, OutermostNestingLoop, NestingLoops);
-      ATBC.classify(MasterC, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
+      if (EnableAmortized) {
+        ATA2C.classify(MasterC, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
+        ATAC.classify(MasterC, MultiExit, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
+        /* Make sure to pass Unsliced!!!
+        * MultiExitNoCond classifier needs the Unsliced CFG to find all increments!
+        */
+        WeakATAC.classify(MasterC, MultiExitNoCond, Unsliced, OutermostNestingLoop, NestingLoops);
+        ATBC.classify(MasterC, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
 
-      /* Uses hasClass!!!
-      * Make sure to run this AFTER WeakAmortizedTypeAClassifier!!!
-      */
-      IIOC.classify(ProperlyNestedLoops, SlicedOuterLoop);
+        /* Uses hasClass!!!
+        * Make sure to run this AFTER WeakAmortizedTypeAClassifier!!!
+        */
+        IIOC.classify(ProperlyNestedLoops, SlicedOuterLoop);
+      }
+
+      LoopClassifier::classify(Unsliced, "Time", (int)(time(NULL)-Begin));
     }
 };
 

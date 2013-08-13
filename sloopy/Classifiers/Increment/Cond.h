@@ -48,12 +48,6 @@ static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
   else if (const BinaryOperator *ConditionOp = dyn_cast<BinaryOperator>(CondInner)) {
     BinaryOperatorKind Opc = ConditionOp->getOpcode();
     if ((Opc >= BO_Mul && Opc <= BO_Shr) || ConditionOp->isComparisonOp()) {
-      const VarDecl *BoundVar;
-
-/*       if (!(ConditionOp->getLHS()->getType()->isIntegerType())) */
-/*         throw checkerror(Unknown, Marker, "Cond_LHS_NoInteger"); */
-/*       if (!(ConditionOp->getRHS()->getType()->isIntegerType())) */
-/*         throw checkerror(Unknown, Marker, "Cond_RHS_NoInteger"); */
 
       // see if LHS/RHS is integer var
       bool LoopVarLHS;
@@ -74,18 +68,14 @@ static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
       }
 
       /* determine which is loop var, which is bound */
-      if (LHS != NULL && RHS != NULL) {
-        // both lhs and rhs are vars
-        // check which one is the loop var (i.e. equal to the initialization variable)
-        if (Increment.VD == LHS) {
-          LoopVarLHS = true;
-        }
-        else if (Increment.VD == RHS) {
-          LoopVarLHS = false;
-        }
-        else {
-          throw checkerror("Cond_LoopVar_NotIn_BinaryOperator");
-        }
+      if (LHS == Increment.VD && getVariable(ConditionOp->getRHS())) {
+        // LHS is loop var, RHS is var bound
+        LoopVarLHS = true;
+        Bound = new VarDeclIntPair(RHS);
+      } else if (RHS == Increment.VD && getVariable(ConditionOp->getLHS())) {
+        // RHS is loop var, LHS is var bound
+        LoopVarLHS = false;
+        Bound = new VarDeclIntPair(LHS);
       }
       else if (LHS != NULL && isIntegerConstant(ConditionOp->getRHS(), Context)) {
         // LHS is loop var, RHS is integer bound
@@ -107,12 +97,12 @@ static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
         LoopVarLHS = false;
         Bound = new VarDeclIntPair();
       }
-      else if (LHS != NULL && LHS == Increment.VD) {
+      else if (LHS != NULL) {
         LoopVarLHS = true;
         Suffix = "ComplexBound";
         Bound = new VarDeclIntPair();
       }
-      else if (RHS != NULL && RHS == Increment.VD) {
+      else if (RHS != NULL) {
         LoopVarLHS = false;
         Suffix = "ComplexBound";
         Bound = new VarDeclIntPair();
@@ -121,8 +111,6 @@ static std::pair<std::string, VarDeclIntPair> checkIncrementCond(
         throw checkerror("Cond_BinOp_TooComplex");
       }
       CondVar = LoopVarLHS ? LHS : RHS;
-      BoundVar = LoopVarLHS ? RHS : LHS; // null if integer-literal, sizeof, ...
-      if (BoundVar) Bound = new VarDeclIntPair(BoundVar);
     }
     else {
       throw checkerror("Cond_BinOp_OpNotSupported");

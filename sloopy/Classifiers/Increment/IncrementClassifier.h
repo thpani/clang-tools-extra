@@ -1,8 +1,13 @@
 #pragma once
 
+#include <exception>
+
 #include "LoopClassifier.h"
 #include "ADT.h"
 #include "Helpers.h"
+#include "LinearHelper.h"
+
+using namespace sloopy::z3helper;
 
 class IncrementClassifier : public LoopClassifier {
   private:
@@ -11,7 +16,20 @@ class IncrementClassifier : public LoopClassifier {
     class LoopVariableFinder : public RecursiveASTVisitor<LoopVariableFinder> {
       public:
         LoopVariableFinder(const IncrementClassifier *Outer) : Outer(Outer) {}
-        const std::set<IncrementInfo> findLoopVarCandidates(const NaturalLoop *Loop) {
+        const std::vector<IncrementInfo> findIncrements (const NaturalLoopBlock *Block) {
+          LoopVarCandidates.clear();
+          this->TraverseStmt(const_cast<Expr*>(Block->getTerminatorCondition()));
+          for (auto S : *Block) {
+            this->TraverseStmt(const_cast<Stmt*>(S));
+          }
+          return LoopVarCandidates;
+        }
+        const std::set<IncrementInfo> findLoopVarCandidates(const NaturalLoopBlock *Block) {
+          auto Increments = findIncrements(Block);
+          return std::set<IncrementInfo>(Increments.begin(), Increments.end());
+        }
+        const std::vector<IncrementInfo> findIncrements(const NaturalLoop *Loop) {
+          LoopVarCandidates.clear();
           for (auto Block : *Loop) {
             this->TraverseStmt(const_cast<Expr*>(Block->getTerminatorCondition()));
             for (auto S : *Block) {
@@ -20,54 +38,102 @@ class IncrementClassifier : public LoopClassifier {
           }
           return LoopVarCandidates;
         }
+        const std::set<IncrementInfo> findLoopVarCandidates(const NaturalLoop *Loop) {
+          auto Increments = findIncrements(Loop);
+          return std::set<IncrementInfo>(Increments.begin(), Increments.end());
+        }
 
         bool VisitExpr(Expr *Expr) {
           try {
             const IncrementInfo I = Outer->getIncrementInfo(Expr);
-            LoopVarCandidates.insert(I);
+            LoopVarCandidates.push_back(I);
           } catch(checkerror) {}
           return true;
         }
 
       private:
-        std::set<IncrementInfo> LoopVarCandidates;
+        std::vector<IncrementInfo> LoopVarCandidates;
         const IncrementClassifier *Outer;
     };
 
-    void addPseudoConstantVar(const std::string Name, const VarDecl *Var, const Stmt *IncrementOp=NULL) const {
-      const PseudoConstantInfo I = { Name, Var, IncrementOp };
+    class InvariantVarFinder : public RecursiveASTVisitor<InvariantVarFinder> {
+      const NaturalLoop * const Loop;
+      std::set<const VarDecl*> Variables, NonInv, Inv;
+      bool AnalysisRun = false;
+
+      void RunAnalysis() {
+        // Collect all variables
+        for (auto Block : *Loop) {
+          this->TraverseStmt(const_cast<Expr*>(Block->getTerminatorCondition()));
+          for (auto S : *Block) {
+            this->TraverseStmt(const_cast<Stmt*>(S));
+          }
+        }
+
+        // Find those non-invariant
+        // TODO assignment to invariant value
+        for (auto Block : *Loop) {
+          if (const Expr *Cond = Block->getTerminatorCondition()) {
+            DefUseHelper A(Cond);
+            for (const VarDecl *VD : Variables) {
+              if (A.isDef(VD)) {
+                NonInv.insert(VD);
+              }
+            }
+          }
+          for (auto Stmt : *Block) {
+            DefUseHelper A(Stmt);
+            for (const VarDecl *VD : Variables) {
+              if (A.isDef(VD)) {
+                NonInv.insert(VD);
+              }
+            }
+          }
+        }
+
+        std::set_difference(Variables.begin(), Variables.end(), NonInv.begin(), NonInv.end(), std::inserter(Inv, Inv.end()));
+        AnalysisRun = true;
+      }
+
+      public:
+        InvariantVarFinder(const NaturalLoop *Loop) : Loop(Loop) {}
+
+        bool VisitDeclRefExpr(DeclRefExpr *DRE) {
+          if (const VarDecl *VD = dyn_cast<VarDecl>(DRE->getDecl())) {
+            Variables.insert(VD);
+          }
+          return true;
+        }
+
+        bool isInvariant(const VarDecl *VD) {
+          if (!AnalysisRun) RunAnalysis();
+          return Inv.count(VD) > 0;
+        }
+    };
+
+    void addPseudoConstantVar(const std::string Name, const VarDecl *Var) const {
+      const PseudoConstantInfo I = { Name, Var };
       PseudoConstantSet.push_back(I);
     }
 
     void checkPseudoConstantSet(const NaturalLoop *L) const throw (checkerror) {
-      for (auto Block : *L) {
-        for (auto Stmt : *Block) {
-          DefUseHelper A(Stmt);
-          for (auto IncrementElement : PseudoConstantSet) {
-            if (A.isDefExclDecl(IncrementElement.Var, IncrementElement.IncrementOp)) {
-              throw checkerror(IncrementElement.Name+"_ASSIGNED");
-            }
-          }
+      InvariantVarFinder F(L);
+      for (auto IncrementElement : PseudoConstantSet) {
+        if (!F.isInvariant(IncrementElement.Var)) {
+          throw checkerror(IncrementElement.Name+"_ASSIGNED");
         }
       }
     }
-    
-    unsigned checkDataFlow(const NaturalLoop *L, const IncrementInfo I) const {
+
+    bool termCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
       const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
 
-      // Initialize all blocks
-      std::map<const NaturalLoopBlock *, unsigned> In, Out, OldOut;
-      for (auto Block : *L) {     // (2)
-        Out[Block] = 0;
-      }
+      std::map<const NaturalLoopBlock *, bool> In, Out, OldOut;
 
-      // Initialize header
-      unsigned n = 0;
-      for (auto Stmt : *Header) {
-        DefUseHelper H(Stmt);
-        n += H.countDefs(I.VD);
+      // Initialize all blocks    (1) + (2)
+      for (auto Block : *L) {
+        Out[Block] = ProvablyTerminatingBlocks.count(Block);
       }
-      Out[Header] = n;          // (1)
 
       // while OUT changes
       while (Out != OldOut) {     // (3)
@@ -76,49 +142,230 @@ class IncrementClassifier : public LoopClassifier {
         for (auto Block : *L) {   // (4)
 
           // meet (propagate OUT -> IN)
-          unsigned max = 0;
+          bool meet = true;
           for (NaturalLoopBlock::const_pred_iterator P = Block->pred_begin(),
                                                      E = Block->pred_end();
                                                      P != E; P++) {    // (5)
             const NaturalLoopBlock *Pred = *P;
-            auto compare = std::greater<unsigned>();
-            if (compare(Out[Pred], max)) {
-              max = Out[Pred];
-            }
+            meet = meet and Out[Pred];
           }
-          In[Block] = max;
-          /* llvm::errs() << "In " << Block->getBlockID() << " " << In[Block] << "\n"; */
+          In[Block] = meet;
 
           if (Block == Header) continue;
 
           // compute OUT / f_B(x)
-          unsigned n = 0;
-          for (auto Stmt : *Block) {
-            DefUseHelper H(Stmt);
-            n += H.countDefs(I.VD);
-          }
-          Out[Block] = std::min(2U, In[Block] + n); // (6)
-          /* llvm::errs() << "Out " << Block->getBlockID() << " " << Out[Block] << "\n"; */
+          Out[Block] = ProvablyTerminatingBlocks.count(Block) or In[Block];   // (6)
         }
       }
 
       return In[Header];
     }
 
-    void checkBody(const NaturalLoop *L, const IncrementInfo I) const throw (checkerror) {
-      unsigned Result = checkDataFlow(L, I);
+    struct AugComp;
 
-      if (Result < 1)
-          throw checkerror("ASSIGNED_NotAllPaths");
-      if (Result > 1)
-          throw checkerror("ASSIGNED_Twice");
+    class AugInt {
+      friend struct AugComp;
+
+      typedef int longest_int;
+      bool Unknown = false;
+      longest_int Value = 0;
+
+      public:
+      AugInt() {}
+      AugInt(int i) : Value(i) {}
+      static AugInt UnknownAugInt () {
+        AugInt A;
+        A.Unknown = true;
+        return A;
+      }
+
+      bool isUnknown() const {
+        return Unknown;
+      }
+      void setUnknown() {
+        Unknown = true;
+      }
+
+      std::string str() const {
+        if (Unknown) return "Unknown";
+        else {
+          std::stringstream ss;
+          ss << Value;
+          return ss.str();
+        }
+      }
+
+      AugInt operator+(const AugInt &Other) const {
+        if (Unknown or Other.Unknown) return UnknownAugInt();
+        if ((Value > 0 and Other.Value > 0 and Value > (std::numeric_limits<longest_int>::max() - Other.Value)) or 
+            (Value < 0 and Other.Value < 0 and Value < (std::numeric_limits<longest_int>::min() - Other.Value))) {
+          llvm::errs() << "Overflow\n";
+          return UnknownAugInt();
+        }
+        return AugInt(Value + Other.Value);
+      }
+      void operator+=(const int i) {
+        if (Unknown) return;
+
+        AugInt Result = *this + AugInt(i);
+
+        Unknown = Result.Unknown;
+        Value   = Result.Value;
+      }
+      bool operator<(const AugInt &Other) const {
+        assert (not Unknown and not Other.Unknown);
+        return Value < Other.Value;
+      }
+      bool operator>(const AugInt &Other) const {
+        assert (not Unknown and not Other.Unknown);
+        return Value > Other.Value;
+      }
+      // Unknown == Unknown - othw fixed point iterations dont terminate
+      bool operator==(const AugInt &Other) const {
+        /* if (Unknown or Other.Unknown) return false; */
+        return Unknown == Other.Unknown and Value == Other.Value;
+      }
+      bool operator!=(const AugInt &Other) const {
+        /* if (Unknown or Other.Unknown) return false; */
+        return not ((*this) == Other);
+      }
+    };
+
+    struct AugComp {
+      bool operator() (const AugInt& lhs, const AugInt& rhs) const {
+        return lhs.Unknown < rhs.Unknown or
+              (lhs.Unknown == rhs.Unknown and lhs.Value < rhs.Value);
+      }
+    };
+    
+    struct CheckBodyResult {
+      unsigned MaxAssignments;
+      unsigned MinAssignments;
+      std::set<AugInt, AugComp> AccumulatedIncrement;
+
+      bool operator==(const CheckBodyResult &Other) const {
+        return MaxAssignments == Other.MaxAssignments and
+               MinAssignments == Other.MinAssignments and
+               AccumulatedIncrement == Other.AccumulatedIncrement;
+      }
+      bool operator!=(const CheckBodyResult &Other) const {
+        return not ((*this) == Other);
+      }
+    };
+
+    CheckBodyResult checkBody(const NaturalLoop *L, const IncrementInfo I) const throw () {
+      const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
+      LoopVariableFinder Finder(this);
+
+      std::map<const NaturalLoopBlock *, unsigned> IncrementCount;
+      std::map<const NaturalLoopBlock *, AugInt> AccumulatedIncrement;
+      for (auto Block : *L) {
+        for (const IncrementInfo Increment : Finder.findIncrements(Block)) {
+          if (Increment.VD == I.VD) {
+            IncrementCount[Block]++;
+            if (Increment.Delta.isInt()) {
+              AccumulatedIncrement[Block] += Increment.Delta.Int.getSExtValue();
+            } else {
+              AccumulatedIncrement[Block].setUnknown();
+            }
+          }
+        }
+      }
+
+      std::map<const NaturalLoopBlock *, CheckBodyResult> In, Out;
+
+      // Initialize all blocks    (1) + (2)
+      std::stack<const NaturalLoopBlock*> Worklist;
+      for (auto Block : *L) {
+        Out[Block] = { 0, 0, { 0 } };
+        if (IncrementCount[Block] or AccumulatedIncrement[Block].isUnknown() or AccumulatedIncrement[Block] != 0) {
+          Worklist.push(Block);
+        }
+      }
+
+      std::set<const NaturalLoopBlock *> Visited;
+
+      // while OUT changes
+      while (Worklist.size()) {
+        const NaturalLoopBlock *Block = Worklist.top();
+        Worklist.pop();
+
+        // meet (propagate OUT -> IN)
+        unsigned max = 0;
+        unsigned min = std::numeric_limits<unsigned>::max();
+        std::set<AugInt, AugComp> allIncs;
+        for (NaturalLoopBlock::const_pred_iterator P = Block->pred_begin(),
+                                                    E = Block->pred_end();
+                                                    P != E; P++) {    // (5)
+          const NaturalLoopBlock *Pred = *P;
+          if (Pred == &L->getEntry()) continue;
+          max = Out[Pred].MaxAssignments > max ? Out[Pred].MaxAssignments : max;
+          min = Out[Pred].MinAssignments < min ? Out[Pred].MinAssignments : min;
+          allIncs.insert(Out[Pred].AccumulatedIncrement.begin(), Out[Pred].AccumulatedIncrement.end());
+        }
+        In[Block] = { max, min, allIncs };
+
+        if (Block == Header) continue;
+
+        Visited.insert(Block);
+        bool loop = false;
+        for (NaturalLoopBlock::const_succ_iterator I = Block->succ_begin(),
+                                                   E = Block->succ_end();
+                                                   I != E; I++) {
+          const NaturalLoopBlock *Succ = *I;
+          if (Visited.count(Succ)) {
+            loop = true;
+          }
+        }
+
+        // compute OUT / f_B(x)
+        std::set<AugInt, AugComp> allIncsOut;
+        if (loop) {
+          allIncsOut = { AugInt::UnknownAugInt() };
+        } else {
+          for (auto incIn : allIncs) {
+            allIncsOut.insert(incIn + AccumulatedIncrement[Block]);
+          }
+        }
+        unsigned n = IncrementCount[Block];
+        CheckBodyResult NewOut = {  // (6)
+          std::min(2u, In[Block].MaxAssignments + n),
+          std::min(2u, In[Block].MinAssignments + n),
+          allIncsOut
+        };
+
+        if (Out[Block] != NewOut) {
+          for (NaturalLoopBlock::const_succ_iterator I = Block->succ_begin(),
+                                                     E = Block->succ_end();
+                                                     I != E; I++) {
+            const NaturalLoopBlock *Succ = *I;
+            Worklist.push(Succ);
+          }
+        }
+
+        Out[Block] = NewOut;
+
+/*         llvm::errs() << Block->getBlockID() << "\nIn: "; */
+/*         for (auto X : In[Block].AccumulatedIncrement) */
+/*           llvm::errs() << X.str() << ","; */
+/*         llvm::errs() << "\nOut: "; */
+/*         for (auto X : Out[Block].AccumulatedIncrement) */
+/*           llvm::errs() << X.str() << ","; */
+/*         llvm::errs() << "\n"; */
+      }
+      /* llvm::errs() << "\n===\n"; */
+      /* for (auto X : In[Header].AccumulatedIncrement) */
+      /*   llvm::errs() << X.str() << ","; */
+      /* llvm::errs() << "\n===\n"; */
+
+      return In[Header];
     }
 
   protected:
     const std::string Marker;
     const ASTContext *Context;
 
-    virtual IncrementInfo getIncrementInfo(const Expr *Expr) const throw (checkerror) = 0;
+    virtual IncrementInfo getIncrementInfo(const Stmt *Stmt) const throw (checkerror) = 0;
     virtual std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo I) const throw (checkerror) = 0;
 
   public:
@@ -126,7 +373,77 @@ class IncrementClassifier : public LoopClassifier {
       LoopClassifier(), Marker(Marker), Context(Context) {}
     virtual ~IncrementClassifier() {}
 
+    void classifyProve(const NaturalLoop *Loop) const throw () {
+      if (LoopClassifier::hasClass(Loop, "Proved")) return;
+
+      LoopVariableFinder Finder(this);
+      const std::set<IncrementInfo> LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
+      std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks;
+
+      // restrict loop var candidates to those incremented on each path
+      std::set<IncrementInfo> LoopVarCandidatesEachPath;
+      for (const IncrementInfo I : LoopVarCandidates) {
+        auto MaxMin = checkBody(Loop, I);
+        if (MaxMin.MinAssignments >= 1) {
+          // there are >= 1 assignments on each path
+          LoopVarCandidatesEachPath.insert(I);
+        }
+      }
+
+      InvariantVarFinder F(Loop);
+      bool AssumptionMade = false;
+      // find provably terminating blocks
+      for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
+                                                 PE = Loop->getExit().pred_end();
+                                                 PI != PE; PI++) {
+        const NaturalLoopBlock *Block = *PI;
+        const Expr *Cond = Block->getTerminatorCondition();
+        for (const IncrementInfo I : LoopVarCandidatesEachPath) {
+          LinearHelper H;
+          if (Monotonicity Mon = H.isMonotonicIn(I.VD, Cond)) {
+            // check if all constants are loop-invariant
+            bool AllVarsConst = true;
+            for (auto VD : H.getConstants()) {
+              if (VD == I.VD) continue;
+              AllVarsConst = AllVarsConst and F.isInvariant(VD);
+              if (!AllVarsConst) break;
+            }
+            if (!AllVarsConst) continue;
+
+            // see if we can find a proof
+            if (Mon == StrictIncreasing) {
+              auto MaxMin = checkBody(Loop, I);
+              if (MaxMin.AccumulatedIncrement.size() == 1 and not MaxMin.AccumulatedIncrement.begin()->isUnknown() and *MaxMin.AccumulatedIncrement.begin() < 0) {
+                for (auto VD : H.getAssumeWrapv()) {
+                  if (not VD->getType().getTypePtr()->isUnsignedIntegerOrEnumerationType()) AssumptionMade = true;
+                }
+                ProvablyTerminatingBlocks.insert(Block);
+              }
+            }
+            if (Mon == StrictDecreasing) {
+              auto MaxMin = checkBody(Loop, I);
+              if (MaxMin.AccumulatedIncrement.size() == 1 and not MaxMin.AccumulatedIncrement.begin()->isUnknown() and *MaxMin.AccumulatedIncrement.begin() > 0) {
+                for (auto VD : H.getAssumeWrapv()) {
+                  if (not VD->getType().getTypePtr()->isUnsignedIntegerOrEnumerationType()) AssumptionMade = true;
+                }
+                ProvablyTerminatingBlocks.insert(Block);
+              }
+            }
+          }
+        }
+      }
+
+      // check there is a PTB on each path
+      bool Proved = termCondOnEachPath(Loop, ProvablyTerminatingBlocks);
+      LoopClassifier::classify(Loop, "Proved", Proved);
+      if (Proved) {
+        LoopClassifier::classify(Loop, "ProvedWithAssumption", AssumptionMade ? "wrapv" : "none");
+      }
+    }
+
     std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const throw () {
+      classifyProve(Loop);
+
       // do we have the right # of exit arcs?
       unsigned PredSize = Loop->getExit().pred_size();
       if (Constr.ECConstr != ANY_EXIT && PredSize != Constr.ECConstr) {
@@ -159,7 +476,11 @@ class IncrementClassifier : public LoopClassifier {
 
             // increments on each path?
             if (Constr.IConstr == EACH_PATH) {
-              checkBody(Loop, I);
+              auto pair = checkBody(Loop, I);
+              if (pair.MaxAssignments > 1)
+                  throw checkerror("ASSIGNED_Twice");
+              if (pair.MinAssignments < 1)
+                  throw checkerror("ASSIGNED_NotAllPaths");
             }
 
             // condition well formed?
@@ -173,15 +494,20 @@ class IncrementClassifier : public LoopClassifier {
             VarDeclIntPair Bound = result.second;
 
             // are variables in condition pseudo-const modulo increments?
+            assert((Constr.EWConstr == ANY_EXITCOND || Cond) && "SomeWellformed constraint => condition");
             if (Cond) {
               PseudoConstantSet.clear();
               DefUseHelper CondDUH(Cond);
-                for (auto VD : CondDUH.getDefsAndUses()) {
-                  if (VD == I.VD) continue;
-                  std::string name = I.VD == Bound.Var ? "N" : (I.VD == I.Delta.Var ? "D" : "X");
-                  /* std::string name = I.VD == Bound.Var ? "N" : (I.VD == I.Delta ? "D" : VD->getNameAsString()); */
-                  addPseudoConstantVar(name, VD);
-                }
+              for (auto VD : CondDUH.getDefsAndUses()) {
+                if (VD == I.VD) continue;
+                std::string name = I.VD == Bound.Var ? "N" : (I.VD == I.Delta.Var ? "D" : "X");
+                /* std::string name = I.VD == Bound.Var ? "N" : (I.VD == I.Delta ? "D" : VD->getNameAsString()); */
+                addPseudoConstantVar(name, VD);
+              }
+              if (Constr.IConstr == SOME_PATH && I.Delta.Var) {
+                addPseudoConstantVar("D", I.Delta.Var);
+              }
+              
               checkPseudoConstantSet(Loop);
             }
 
@@ -198,12 +524,10 @@ class IncrementClassifier : public LoopClassifier {
             Reasons.insert(e.what());
           }
         }
-        if (Constr.EWConstr == ALL_WELLFORMED && !WellformedIncrement) {
-          LoopClassifier::classify(Loop, Constr.str(), Marker, "NotAllWellformed", false);
-        }
-
-/* next_exit: */
-/*         ; /1* no op *1/ */
+        // TODO
+        /* if (Constr.EWConstr == ALL_WELLFORMED && !WellformedIncrement) { */
+        /*   LoopClassifier::classify(Loop, Constr.str(), Marker, "NotAllWellformed", false); */
+        /* } */
       }
 
       // We found well-formed increments

@@ -3,9 +3,11 @@
 #include "ADT.h"
 #include "Helpers.h"
 
-static IncrementInfo getIncrementInfo(const Expr *Expr, const std::string Marker, const ASTContext *Context, const TypePredicate TypePredicate) throw(checkerror) {
-  if (Expr == NULL) throw checkerror("Inc_None");
-  const class Expr *Expression = Expr->IgnoreParenCasts();
+static IncrementInfo getIncrementInfo(const Stmt *Stmt, const std::string Marker, const ASTContext *Context, const TypePredicate TypePredicate) throw(checkerror) {
+  if (Stmt == NULL) throw checkerror("Inc_None");
+  const Expr *E = dyn_cast<Expr>(Stmt);
+  if (E == NULL) throw checkerror("Inc_NotExpr");
+  const Expr *Expression = E->IgnoreParenCasts();
   if (const UnaryOperator *UOP = dyn_cast<UnaryOperator>(Expression)) {
     // i{++,--}
     if (UOP->isIncrementDecrementOp()) {

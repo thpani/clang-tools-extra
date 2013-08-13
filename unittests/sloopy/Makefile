@@ -1,4 +1,4 @@
-##===- tools/extra/test/Unit/Makefile ----------------------*- Makefile -*-===##
+##===- unittests/sloopy/Makefile ---------------------------*- Makefile -*-===##
 #
 #                     The LLVM Compiler Infrastructure
 #
@@ -7,9 +7,14 @@
 #
 ##===----------------------------------------------------------------------===##
 
-CLANG_LEVEL := ../../..
+CLANG_LEVEL = ../../../..
 include $(CLANG_LEVEL)/../../Makefile.config
 
-PARALLEL_DIRS := cpp11-migrate sloopy
+TESTNAME = SloopyTests
+LINK_COMPONENTS := support option
+USEDLIBS = clangTooling.a 
 
 include $(CLANG_LEVEL)/Makefile
+MAKEFILE_UNITTEST_NO_INCLUDE_COMMON := 1
+CPP.Flags += -I$(PROJ_SRC_DIR)/../../sloopy
+include $(LLVM_SRC_ROOT)/unittests/Makefile.unittest

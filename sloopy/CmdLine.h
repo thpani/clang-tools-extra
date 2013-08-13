@@ -19,3 +19,5 @@ llvm::cl::opt<bool> DumpStmt("dump-stmt");
 llvm::cl::opt<std::string> Function("func");
 llvm::cl::opt<std::string> File("file");
 llvm::cl::opt<unsigned> Line("line");
+llvm::cl::opt<bool> DumpZ3("dump-z3");
+llvm::cl::opt<bool> EnableAmortized("enable-amortized");

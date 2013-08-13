@@ -1,5 +1,6 @@
 #pragma once
 
+/* variable, int, or unknown */
 class VarDeclIntPair {
   public:
     VarDeclIntPair() : Var(NULL), Int(llvm::APInt()) {}
@@ -9,41 +10,41 @@ class VarDeclIntPair {
     const VarDecl *Var;
     llvm::APInt Int;
 
+    bool isInt() const {
+      return Int.getBitWidth() > 1;
+    }
     bool operator==(const VarDeclIntPair &Other) const {
       if (Var || Other.Var) return Var == Other.Var;
-      return Int.getBitWidth() > 1 && Other.Int.getBitWidth() > 1 && llvm::APInt::isSameValue(Int, Other.Int);
+      return isInt() && Other.isInt() && llvm::APInt::isSameValue(Int, Other.Int);
     }
     bool operator<(const VarDeclIntPair &Other) const {
-      if (Var || Other.Var) {
-        return Var < Other.Var;
-      }
-      return Int.getSExtValue() < Other.Int.getSExtValue();
+      return Var < Other.Var or
+            (Var == Other.Var and Int.getSExtValue() < Other.Int.getSExtValue());
     }
 };
 
 struct IncrementInfo {
   const VarDecl *VD;
-  const Stmt *Statement;
-  const VarDeclIntPair Delta;
+  const Expr *Statement;
+  VarDeclIntPair Delta;
 
   bool operator<(const IncrementInfo &Other) const {
-    return VD < Other.VD || Delta < Other.Delta;
+    return std::tie(VD, Delta) < std::tie(Other.VD, Other.Delta);
   }
 };
 
 struct PseudoConstantInfo {
   const std::string Name;
   const VarDecl *Var;
-  const Stmt *IncrementOp;
 };
 
 struct IncrementLoopInfo {
   const VarDecl *VD;
-  const Stmt *Statement;
+  const Expr *Statement;
   const VarDeclIntPair Delta;
   const VarDeclIntPair Bound;
   bool operator<(const IncrementLoopInfo &Other) const {
-    return VD < Other.VD || Delta < Other.Delta || Bound < Other.Bound;
+    return std::tie(VD, Delta, Bound) < std::tie(Other.VD, Other.Delta, Other.Bound);
   }
 };
 
@@ -54,8 +55,7 @@ enum ExitsCountConstraint {
 
 enum ExitsWellformedConstraint {
   ANY_EXITCOND,
-  SOME_WELLFORMED,
-  ALL_WELLFORMED
+  SOME_WELLFORMED
 };
 
 enum IncrementsConstraint {
@@ -93,9 +93,6 @@ struct IncrementClassifierConstraint {
         Result << "NoCond";
         break;
       case SOME_WELLFORMED:
-        break;
-      case ALL_WELLFORMED:
-        Result << "AllWellformed";
         break;
     }
 
