@@ -182,8 +182,8 @@ void sloopy::DefUseHelper::HandleCallExpr(const CallExpr* C) {
   for (CallExpr::const_arg_iterator I = C->arg_begin(),
                                     E = C->arg_end();
                                     I != E; ++I) {
-    if ((*I)->getType()->isPointerType() || (*I)->getType()->isReferenceType())
-      current_use = Def;
+    /* if ((*I)->getType()->isPointerType() || (*I)->getType()->isReferenceType()) */
+    /*   current_use = Def; */
     if (current_use != Use) {
       Edits.push(C);
       Visit(*I);
