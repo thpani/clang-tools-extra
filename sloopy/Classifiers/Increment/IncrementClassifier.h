@@ -2,6 +2,8 @@
 
 #include <exception>
 
+#include "llvm/ADT/BitVector.h"
+
 #include "LoopClassifier.h"
 #include "ADT.h"
 #include "Helpers.h"
@@ -199,6 +201,10 @@ class IncrementClassifier : public LoopClassifier {
       }
       void setUnknown() {
         Unknown = true;
+      }
+      longest_int getVal() const {
+        assert(not Unknown);
+        return Value;
       }
 
       std::string str() const {
@@ -430,54 +436,95 @@ class IncrementClassifier : public LoopClassifier {
         LoopVarCandidatesEachPath.insert(I);
       }
 
-      bool AssumptionMade = false;
+      llvm::BitVector Assumption(3);
       // find provably terminating blocks
       for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
                                                  PE = Loop->getExit().pred_end();
                                                  PI != PE; PI++) {
         const NaturalLoopBlock *Block = *PI;
+        // TODO dealing with case is more complex (compare labels):
+        if (Block->getTerminator()->getStmtClass() == Stmt::SwitchStmtClass) {
+          continue;
+        }
+        
         const Expr *Cond = Block->getTerminatorCondition();
+
+        bool foundExit = false;
+        unsigned whichBranch = 0;
+        for (NaturalLoopBlock::const_succ_iterator SI = Block->succ_begin(),
+                                                   SE = Block->succ_end();
+                                                   SI != SE; SI++) {
+          const NaturalLoopBlock *Block = *SI;
+          if (Block == (&Loop->getExit())) {
+            foundExit = true;
+            break;
+          }
+
+          whichBranch++;
+        }
+        assert(foundExit);
+        assert(0 <= whichBranch and whichBranch <= 1);
+        /* llvm::errs() << "Cand: " << LoopVarCandidatesEachPath.size() << "\n"; */
+        DEBUG( Cond->printPretty(llvm::dbgs(), NULL, PrintingPolicy(LangOptions())); llvm::dbgs() << "\n"; );
+        DEBUG( llvm::dbgs() << "Branch: " << whichBranch << "\n" );
         for (const IncrementInfo I : LoopVarCandidatesEachPath) {
           LinearHelper H;
-          if (Monotonicity Mon = H.isMonotonicIn(I.VD, Cond)) {
+
+          auto MaxMin = checkBody(Loop, I);
+          DEBUG( llvm::dbgs() << I.VD->getNameAsString() << " IncrementSize: " << MaxMin.AccumulatedIncrement.size() << "\n" );
+          if (MaxMin.AccumulatedIncrement.size() == 1 and not MaxMin.AccumulatedIncrement.begin()->isUnknown()) {
+            auto i = *MaxMin.AccumulatedIncrement.begin();
+            DEBUG( llvm::dbgs() << "Increment: " << i.str() << "\n" );
+
+            // see if we can find a proof
+            if (whichBranch == 1) {
+              // cond needs to become false to exit the loop
+              if (not H.dropsToZero(I.VD, Cond, i.getVal())) {
+                continue;
+              }
+            } else if (whichBranch == 0) {
+              // cond needs to become true to exit the loop
+              if (not H.dropsToZero(I.VD, Cond, i.getVal(), true)) {
+                continue;
+              }
+            } else {
+              llvm_unreachable("exit branch >1");
+            }
+
             // check if all constants are loop-invariant
             bool AllVarsConst = true;
             for (auto VD : H.getConstants()) {
               if (VD == I.VD) continue;
               AllVarsConst = AllVarsConst and F.isInvariant(VD);
-              if (!AllVarsConst) break;
-            }
-            if (!AllVarsConst) continue;
-
-            // see if we can find a proof
-            if (Mon == StrictIncreasing) {
-              auto MaxMin = checkBody(Loop, I);
-              if (MaxMin.AccumulatedIncrement.size() == 1 and not MaxMin.AccumulatedIncrement.begin()->isUnknown() and *MaxMin.AccumulatedIncrement.begin() < 0) {
-                for (auto VD : H.getAssumeWrapv()) {
-                  if (not VD->getType().getTypePtr()->isUnsignedIntegerOrEnumerationType()) AssumptionMade = true;
-                }
-                ProvablyTerminatingBlocks.insert(Block);
+              if (!AllVarsConst) {
+                DEBUG( llvm::dbgs() << VD->getNameAsString() << " is not const\n" );
+                break;
               }
             }
-            if (Mon == StrictDecreasing) {
-              auto MaxMin = checkBody(Loop, I);
-              if (MaxMin.AccumulatedIncrement.size() == 1 and not MaxMin.AccumulatedIncrement.begin()->isUnknown() and *MaxMin.AccumulatedIncrement.begin() > 0) {
-                for (auto VD : H.getAssumeWrapv()) {
-                  if (not VD->getType().getTypePtr()->isUnsignedIntegerOrEnumerationType()) AssumptionMade = true;
+            if (!AllVarsConst) {
+              continue;
                 }
+
+            auto A = H.getAssumptions();
+            assert(Assumption.size() == A.size() and "bitvectors should be same size");
+            Assumption |= A;
                 ProvablyTerminatingBlocks.insert(Block);
               }
             }
           }
-        }
-      }
+      DEBUG( llvm::dbgs() << "ProvablyTerminatingBlocks: " << ProvablyTerminatingBlocks.size() << "\n" );
 
       // check there is a PTB on each path
       bool Proved = termCondOnEachPath(Loop, ProvablyTerminatingBlocks);
       LoopClassifier::classify(Loop, "Proved", Proved);
       if (Proved) {
-        LoopClassifier::classify(Loop, "ProvedWithAssumption", AssumptionMade ? "wrapv" : "none");
+        LoopClassifier::classify(Loop, "ProvedWithoutAssumptions", Assumption.none());
+        LoopClassifier::classify(Loop, "ProvedWithAssumptionWrapv", Assumption[0]);
+        LoopClassifier::classify(Loop, "ProvedWithAssumptionLeBoundNotMax", Assumption[1]);
+        LoopClassifier::classify(Loop, "ProvedWithAssumptionGeBoundNotMin", Assumption[2]);
       }
+#undef DEBUG_TYPE
+#define DEBUG_TYPE ""
     }
 
     std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const throw () {
