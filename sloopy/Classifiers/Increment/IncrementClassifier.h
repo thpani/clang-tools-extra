@@ -300,9 +300,19 @@ class IncrementClassifier : public LoopClassifier {
       // Initialize all blocks    (1) + (2)
       std::stack<const NaturalLoopBlock*> Worklist;
       for (auto Block : *L) {
-        Out[Block] = { 0, 0, { 0 } };
+        /* Instead of initializing blocks with 0 and pushing them to the worklist,
+         * anticipate the first iteration and push their successsors.
+         * This way we don't need to compute f_HEADER(x) on the first iteration.
+         */
+        Out[Block] = { IncrementCount[Block], IncrementCount[Block], { AccumulatedIncrement[Block] } };
+        DEBUG( llvm::dbgs() << "init [" << Block->getBlockID() << "]: " << IncrementCount[Block] << "\n" );
         if (IncrementCount[Block] or AccumulatedIncrement[Block].isUnknown() or AccumulatedIncrement[Block] != 0) {
-          Worklist.push(Block);
+          for (NaturalLoopBlock::const_succ_iterator I = Block->succ_begin(),
+                                                     E = Block->succ_end();
+                                                     I != E; I++) {
+            const NaturalLoopBlock *Succ = *I;
+            if (Succ) Worklist.push(Succ);
+          }
         }
       }
 
@@ -524,15 +534,15 @@ class IncrementClassifier : public LoopClassifier {
             }
             if (!AllVarsConst) {
               continue;
-                }
+            }
 
             auto A = H.getAssumptions();
             assert(Assumption.size() == A.size() and "bitvectors should be same size");
             Assumption |= A;
-                ProvablyTerminatingBlocks.insert(Block);
-              }
-            }
+            ProvablyTerminatingBlocks.insert(Block);
           }
+        }
+      }
       DEBUG( llvm::dbgs() << "ProvablyTerminatingBlocks: " << ProvablyTerminatingBlocks.size() << "\n" );
 
       // check there is a PTB on each path
