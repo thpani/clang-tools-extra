@@ -563,10 +563,6 @@ class IncrementClassifier : public LoopClassifier {
             Reasons.insert(e.what());
           }
         }
-        // TODO
-        /* if (Constr.EWConstr == ALL_WELLFORMED && !WellformedIncrement) { */
-        /*   LoopClassifier::classify(Loop, Constr.str(), Marker, "NotAllWellformed", false); */
-        /* } */
       }
 
       // We found well-formed increments
