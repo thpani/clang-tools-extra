@@ -39,7 +39,7 @@ class ControlDependenceGraph {
   std::map<const CFGBlock*, std::vector<const CFGBlock*>> CDAdj;
 
   public:
-    bool buildControlDependenceSubgraph(AnalysisDeclContext &AC) {
+    void buildControlDependenceSubgraph(AnalysisDeclContext &AC) {
       // obtain postdom tree
       CFG *CFG = AC.getCFG();
       PostDominatorTree PD;
@@ -58,6 +58,9 @@ class ControlDependenceGraph {
             // edge A->B where B does not postdominate A
             if (!PD.getBase().getNode(const_cast<CFGBlock*>(B))) {
               if (AllowInfiniteLoops) continue;
+              llvm::errs() << "A->B (" <<
+                              A->getBlockID() << "->" <<
+                              B->getBlockID() << "), B not in PDT\n";
               llvm_unreachable(("A->B, B not in PDT (enable -" + std::string(AllowInfiniteLoops.ArgStr) + "?)").c_str());
             }
             // find least common dominator
@@ -79,7 +82,7 @@ class ControlDependenceGraph {
           }
         }
       }
-      return true;
+      return;
     }
 
     bool dependsOn(const CFGBlock *A, const CFGBlock *B) const {
@@ -260,12 +263,9 @@ static const NaturalLoop *buildNaturalLoop(
   }
 
   NaturalLoop *Sliced = new NaturalLoop();
-  if (Sliced->build(Header, Tails, Body, ControlVars, &TrackedStmts, &TrackedBlocks, Unsliced)) {
+  Sliced->build(Header, Tails, Body, ControlVars, &TrackedStmts, &TrackedBlocks, Unsliced);
     return Sliced;
   }
-  delete Sliced;
-  return NULL;
-}
 
 static const NaturalLoop *buildNaturalLoop(
     const MergedLoopDescriptor &Loop,
@@ -275,12 +275,9 @@ static const NaturalLoop *buildNaturalLoop(
   std::set<const CFGBlock*> Body = Loop.Body;
 
   NaturalLoop *Unsliced = new NaturalLoop();
-  if (Unsliced->build(Header, Tails, Body, ControlVars)) {
+  Unsliced->build(Header, Tails, Body, ControlVars);
     return Unsliced;
   }
-  delete Unsliced;
-  return NULL;
-}
 
 static SlicingCriterion slicingCriterionOuterLoop(const MergedLoopDescriptor &Loop) {
   // collect initial control variables
@@ -351,7 +348,8 @@ class FunctionCallback : public MatchFinder::MatchCallback {
 
       ControlDependenceGraph CDG;
       // only for SV-COMP
-      if (!CDG.buildControlDependenceSubgraph(*AC)) return;
+      /* if (!CDG.buildControlDependenceSubgraph(*AC)) return; */
+      CDG.buildControlDependenceSubgraph(*AC);
 
       DominatorTree Dom;
       Dom.buildDominatorTree(*AC);

@@ -55,7 +55,7 @@ class NaturalLoop {
     const NaturalLoop *Unsliced;
   public:
     ~NaturalLoop();
-    bool build(
+    void build(
         const CFGBlock *Header,
         const std::set<const CFGBlock*> Tails,
         const std::set<const CFGBlock*> Blocks,
@@ -370,7 +370,7 @@ void NaturalLoop::dump() const {
   }
 }
 
-bool NaturalLoop::build(
+void NaturalLoop::build(
     const CFGBlock *Header,
     const std::set<const CFGBlock*> Tails,
     const std::set<const CFGBlock*> CFGBlocks,
@@ -445,15 +445,6 @@ bool NaturalLoop::build(
   Blocks.push_back(Exit);
   Blocks.push_back(Entry);
 
-  /* bool IntroducedHeaderExitEdge = false; */
-  if (Exit->pred_size() == 0) {
-    // Exit not reachable from Entry,
-    // introduce an edge Header->Exit
-    /* Map[Header]->Succs.insert(Exit); */
-    /* Exit->Preds.insert(Map[Header]); */
-    /* IntroducedHeaderExitEdge = true; */
-    DEBUG(llvm::errs() << "Ignoring infinite loop.\n");
-    return false;
   }
 
   // reduce
@@ -521,14 +512,7 @@ bool NaturalLoop::build(
     }
   }
 
-/*   if (IntroducedHeaderExitEdge) { */
-/*     assert(Exit->Preds.size() == 1); */
-/*     Map[Header]->Succs.erase(Map[Header]->Succs.begin()); */
-/*     Exit->Preds.erase(Exit->Preds.begin()); */
-/*     assert(Exit->Preds.size() == 0); */
-/*   } */
-
-  return true;
+  return;
 }
 
 typedef std::pair<const NaturalLoop*, const NaturalLoop*> NaturalLoopPair;
