@@ -6,7 +6,6 @@ llvm::cl::opt<bool> AllowInfiniteLoops("allow-infinite-loops");
 llvm::cl::opt<bool> ViewSliced("view-sliced");
 llvm::cl::opt<bool> ViewSlicedOuter("view-sliced-outer");
 llvm::cl::opt<bool> ViewUnsliced("view-unsliced");
-llvm::cl::opt<bool> ViewCFG("view-cfg");
 llvm::cl::opt<bool> DumpBlocks("dump-blocks");
 llvm::cl::opt<bool> DumpIncrementVars("dump-increment-vars");
 llvm::cl::opt<bool> DumpControlVars("dump-control-vars");
