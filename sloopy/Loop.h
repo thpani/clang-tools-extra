@@ -501,6 +501,7 @@ void NaturalLoop::build(
                                                    E = Current->succ_end();
                                                    I != E; I++) {
           NaturalLoopBlock *Succ = *I;
+          if (not Succ) continue;
           for (NaturalLoopBlock::const_pred_iterator PI = Succ->Preds.begin(),
                                                  PE = Succ->Preds.end();
                                                  PI != PE;) {
