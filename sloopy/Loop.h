@@ -455,6 +455,8 @@ void NaturalLoop::build(
   Blocks.push_back(Exit);
   Blocks.push_back(Entry);
 
+#undef DEBUG_TYPE
+#define DEBUG_TYPE "buildNaturalLoop"
   // reduce
   if (TrackedStmts != NULL) {
     llvm::DominatorTreeBase<NaturalLoopBlock> PDT(true);
@@ -463,14 +465,17 @@ void NaturalLoop::build(
                                BE = Blocks.end();
                                BI != BE; ) {
       NaturalLoopBlock *Current = *BI;
-      /* std::cerr << Current->getBlockID() << "\n"; */
-      if (Current == Entry || Current == Exit ||
-          Current == Map[Header] // don't reduce the header or we will end up with no loop at all
-          ) {
+    DEBUG(llvm::dbgs() << "Trying to reduce block " << Current->getBlockID() << "...\n");
+    if (Current == Entry || Current == Exit) {
+      DEBUG(llvm::dbgs() << "pseudo-block, skipping\n");
+      BI++;
+      continue;
+    }
         BI++;
         continue;
       }
-      if (Current->begin() == Current->end() && Current->getTerminator().getStmt() == NULL) {
+    if (Current->begin() == Current->end() and Current->getTerminator().getStmt() == NULL) {
+      DEBUG(llvm::dbgs() << "needs reduction\n");
         // no stmts in this block
         for (NaturalLoopBlock::const_pred_iterator I = Current->pred_begin(),
                                                    E = Current->pred_end();

@@ -181,6 +181,11 @@ static const NaturalLoop *buildNaturalLoop(
     const NaturalLoop *Unsliced,
     const ControlDependenceGraph &CDG,
     const SlicingCriterion SC) {
+#undef DEBUG_TYPE
+#define DEBUG_TYPE "slice"
+
+  DEBUG(llvm::dbgs() << "Starting slice\n");
+
   const CFGBlock *Header = Loop.Header;
   std::set<const CFGBlock*> Tails = Loop.Tails;
   std::set<const CFGBlock*> Body = Loop.Body;
@@ -205,19 +210,17 @@ static const NaturalLoop *buildNaturalLoop(
           if (A.isDef(Var)) {
             // if one of the control vars is modified in this stmt, track the stmt
             if (TrackedStmts.insert(Stmt).second) {
-              if (DumpControlVarsDetail) {
-                llvm::errs() << "1s: ";
-                Stmt->printPretty(llvm::errs(), NULL, PrintingPolicy(LangOptions()));
-                llvm::errs() << "\n";
-              }
+              DEBUG(
+                llvm::dbgs() << "Tracking stmt: ";
+                Stmt->printPretty(llvm::dbgs(), NULL, PrintingPolicy(LangOptions()));
+                llvm::dbgs() << "\n";
+              );
               // add used variables of defining substmts
               for (auto SubStmt : A.getDefiningStmts(Var)) {
                 DefUseHelper C(SubStmt);
                 for (auto Var : C.getUses()) {
                   ControlVars.insert(Var);
-                  if (DumpControlVarsDetail) {
-                    llvm::errs() << "1: " << Var->getNameAsString() << "\n";
-                  }
+                  DEBUG(llvm::dbgs() << "Tracking var: " << Var->getNameAsString() << "\n");
                 }
               }
             }
@@ -232,19 +235,16 @@ static const NaturalLoop *buildNaturalLoop(
                 if (TrackedBlocks.insert(DepBlock).second) {
                   const class Stmt *Stmt = DepBlock->getTerminatorCondition();
                   TrackedStmts.insert(Stmt);
-                  if (DumpControlVarsDetail) {
-                    llvm::errs() << "2s: ";
-                    Stmt->printPretty(llvm::errs(), NULL, PrintingPolicy(LangOptions()));
-                    llvm::errs() << "\n";
-                  }
+                  DEBUG(
+                    llvm::dbgs() << "Tracking control dependent statement: ";
+                    Stmt->printPretty(llvm::dbgs(), NULL, PrintingPolicy(LangOptions()));
+                    llvm::dbgs() << "\n";
+                  );
 
                   DefUseHelper B(Stmt);
                   for (auto Var : B.getDefsAndUses()) {
                     ControlVars.insert(Var);
-                    if (DumpControlVarsDetail) {
-                      /* Stmt->dump(); */
-                      llvm::errs() << "2: " << Var->getNameAsString() << "\n";
-                    }
+                    DEBUG(llvm::dbgs() << "Tracking control dependent var: " << Var->getNameAsString() << "\n");
                   }
                 }
               }
@@ -255,19 +255,19 @@ static const NaturalLoop *buildNaturalLoop(
     }
   } while (TrackedStmts.size() > OldSize);
 
-
-  if (DumpBlocks) {
-    llvm::errs() << "Blocks: ";
-    for (auto Block : Body) {
-      llvm::errs() << Block->getBlockID();
-      llvm::errs() << ", ";
-    }
-    llvm::errs() << "\n";
+  DEBUG(
+    llvm::dbgs() << "Blocks: ";
+    for (auto Block : TrackedBlocks) {
+      llvm::dbgs() << Block->getBlockID();
+      llvm::dbgs() << ", ";
   }
+    llvm::dbgs() << "\n";
+  );
 
   NaturalLoop *Sliced = new NaturalLoop();
   Sliced->build(Header, Tails, Body, ControlVars, &TrackedStmts, &TrackedBlocks, Unsliced);
     return Sliced;
+
   }
 
 static const NaturalLoop *buildNaturalLoop(
@@ -287,17 +287,18 @@ static SlicingCriterion slicingCriterionOuterLoop(const MergedLoopDescriptor &Lo
   std::set<const VarDecl*> ControlVars;
   std::set<const CFGBlock*> ExitingBlocks;
   std::set<const CFGBlock*> NestedExitingBlocks = getExitingTerminatorConditions(Loop.Body);
+  DEBUG(llvm::dbgs() << "start SC computation outer loop\n");
   for (auto Block : NestedExitingBlocks) {
     ExitingBlocks.insert(Block);
     const Stmt *Stmt = Block->getTerminatorCondition();
     DefUseHelper A(Stmt);
     for (auto Var : A.getDefsAndUses()) {
       if(ControlVars.insert(Var).second) {
-        if (DumpControlVarsDetail) {
-          llvm::errs() << "init: " << Var->getNameAsString() << " (B";
-          llvm::errs() << Block->getBlockID();
-          llvm::errs() << ")\n";
-        }
+        DEBUG(
+          llvm::dbgs() << "init: " << Var->getNameAsString() << " (B";
+          llvm::dbgs() << Block->getBlockID();
+          llvm::dbgs() << ")\n";
+        );
       }
     }
   }
@@ -309,6 +310,7 @@ static SlicingCriterion slicingCriterionAllLoops(const MergedLoopDescriptor &Loo
   std::set<const VarDecl*> ControlVars;
   std::set<const CFGBlock*> ExitingBlocks;
   assert(Loop.NestedLoops.size() > 0);
+  DEBUG(llvm::dbgs() << "start SC computation all loops\n");
   for (auto NestedLoop : Loop.NestedLoops) {
     std::set<const CFGBlock*> NestedExitingBlocks = getExitingTerminatorConditions(NestedLoop->Body);
     for (auto Block : NestedExitingBlocks) {
@@ -317,17 +319,19 @@ static SlicingCriterion slicingCriterionAllLoops(const MergedLoopDescriptor &Loo
       DefUseHelper A(Stmt);
       for (auto Var : A.getDefsAndUses()) {
         if(ControlVars.insert(Var).second) {
-          if (DumpControlVarsDetail) {
-            llvm::errs() << "init: " << Var->getNameAsString() << " (B";
-            llvm::errs() << Block->getBlockID();
-            llvm::errs() << ")\n";
-          }
+          DEBUG(
+            llvm::dbgs() << "init: " << Var->getNameAsString() << " (B";
+            llvm::dbgs() << Block->getBlockID();
+            llvm::dbgs() << ")\n";
+          );
         }
       }
     }
   }
   return { ControlVars, ExitingBlocks };
 }
+#undef DEBUG_TYPE
+#define DEBUG_TYPE ""
 
 bool isOutermostNestingLoop(const MergedLoopDescriptor *D) {
   return D->NestingLoops.size() == 1;
@@ -446,13 +450,24 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         }
       }
 
+#undef DEBUG_TYPE
+#define DEBUG_TYPE "buildNaturalLoop"
+
       std::map<MergedLoopDescriptor, std::vector<const NaturalLoop*>> M;
       for (auto &Loop : LoopsAfterMerging) {
         auto SC = slicingCriterionAllLoops(Loop);
+        DEBUG(llvm::dbgs() << "build unsliced\n");
         const NaturalLoop *Unsliced = buildNaturalLoop(Loop, SC.Vars);
         if (!Unsliced) continue;
+        /* Unsliced->view(); */
+        DEBUG(llvm::dbgs() << "build sliced all\n");
         const NaturalLoop *SlicedAllLoops = buildNaturalLoop(Loop, Unsliced, CDG, SC);
+        /* SlicedAllLoops->view(); */
+        DEBUG(llvm::dbgs() << "build sliced outer\n");
         const NaturalLoop *SlicedOuterLoop = buildNaturalLoop(Loop, Unsliced, CDG, slicingCriterionOuterLoop(Loop));
+
+#undef DEBUG_TYPE
+#define DEBUG_TYPE ""
 
         auto LocationPair = Unsliced->getLoopStmtLocation(Result.SourceManager);
         std::stringstream sstm;
