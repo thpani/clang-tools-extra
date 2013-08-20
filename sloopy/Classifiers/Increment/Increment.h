@@ -66,8 +66,25 @@ class DataIterClassifier : public IncrementClassifier {
     }
 
     std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
-      // TODO
-      return std::make_pair(std::string(), VarDeclIntPair());
+      if (Cond == NULL) throw checkerror("Cond_None");
+      const Expr *Expression = Cond->IgnoreParenCasts();
+      if (const DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(Expression)) {
+        const VarDecl *VD = getVariable(DRE);
+        if (VD != Increment.VD)
+          throw checkerror("Cond_VD_Neq_IncVD");
+        return std::make_pair(std::string(), VarDeclIntPair());
+      } else if (const MemberExpr *ME = dyn_cast<MemberExpr>(Expression)) {
+        const VarDecl *Base;
+        if (!(Base = getVariable(ME->getBase()))) {
+          throw checkerror("Cond_RHSBaseNoVar");
+        }
+        if (Base != Increment.VD) {
+          throw checkerror("Cond_BaseVD_Neq_IncVD");
+        }
+        return std::make_pair(std::string(), VarDeclIntPair());
+      } else {
+        throw checkerror("Cond_UnhandledStmt");
+      }
     }
 
   public:
