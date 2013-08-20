@@ -43,6 +43,7 @@ class BranchingClassifier : public LoopClassifier {
                                                    E = Current->succ_end();
                                                    I != E; I++) {
           const NaturalLoopBlock* Succ = *I;
+          if (not Succ) continue;
           Worklist.push(Succ);
           Depths.push(CurrentDepth+1);
         }

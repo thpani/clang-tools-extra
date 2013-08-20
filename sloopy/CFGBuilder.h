@@ -54,6 +54,7 @@ class ControlDependenceGraph {
                                            E2 = A->succ_end();
                                            I2 != E2; I2++) {
           const CFGBlock *B = *I2;
+          if (not B) continue;
           if (!PD.dominates(B, A)) {
             // edge A->B where B does not postdominate A
             if (!PD.getBase().getNode(const_cast<CFGBlock*>(B))) {

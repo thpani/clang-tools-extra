@@ -365,7 +365,12 @@ void NaturalLoop::dump() const {
     }
     llvm::errs() << "\tsuccessors:\n";
     for (auto Succ : Block->Succs) {
+      if (not Succ) continue;
       llvm::errs() << "\t" << Succ->getBlockID() << "\n";
+    }
+    llvm::errs() << "\tpredecessors:\n";
+    for (auto Pred : Block->Preds) {
+      llvm::errs() << "\t" << Pred->getBlockID() << "\n";
     }
   }
 }
@@ -429,6 +434,7 @@ void NaturalLoop::build(
                                        E = Current->succ_end();
                                        I != E; I++) {
       const CFGBlock *Succ = *I;
+      if (Succ) {
       NaturalLoopBlock *CSuccBlock;
       if (Map.find(Succ) == Map.end()) {
         CSuccBlock = Exit;
@@ -436,8 +442,10 @@ void NaturalLoop::build(
       else {
         CSuccBlock = Map[Succ];
       }
-      Map[Current]->Succs.insert(CSuccBlock);
-      CSuccBlock->Preds.insert(Map[Current]);
+        Map[Current]->Succs.push_back(CSuccBlock);
+        CSuccBlock->Preds.push_back(Map[Current]);
+      } else {
+        Map[Current]->Succs.push_back(NULL);
     }
   }
   Entry->Succs.insert(Map[Header]);
