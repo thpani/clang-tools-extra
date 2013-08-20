@@ -157,12 +157,12 @@ class IncrementClassifier : public LoopClassifier {
         for (auto Block : *L) {   // (4)
 
           // meet (propagate OUT -> IN)
-          bool meet = true;
+          bool meet = false;
           for (NaturalLoopBlock::const_pred_iterator P = Block->pred_begin(),
                                                      E = Block->pred_end();
                                                      P != E; P++) {    // (5)
             const NaturalLoopBlock *Pred = *P;
-            meet = meet and Out[Pred];
+            meet = meet or Out[Pred];
           }
           In[Block] = meet;
 
