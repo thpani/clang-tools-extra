@@ -443,10 +443,10 @@ void NaturalLoop::build(
       else {
         CSuccBlock = Map[Succ];
       }
-        Map[Current]->Succs.push_back(CSuccBlock);
-        CSuccBlock->Preds.push_back(Map[Current]);
+        Map[Current]->Succs.insert(CSuccBlock);
+        CSuccBlock->Preds.insert(Map[Current]);
       } else {
-        Map[Current]->Succs.push_back(NULL);
+        Map[Current]->Succs.insert(NULL);
     }
   }
   Entry->Succs.insert(Map[Header]);
