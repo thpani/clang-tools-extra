@@ -353,8 +353,6 @@ class FunctionCallback : public MatchFinder::MatchCallback {
       CFG *CFG = AC->getCFG();
 
       ControlDependenceGraph CDG;
-      // only for SV-COMP
-      /* if (!CDG.buildControlDependenceSubgraph(*AC)) return; */
       CDG.buildControlDependenceSubgraph(*AC);
 
       DominatorTree Dom;
