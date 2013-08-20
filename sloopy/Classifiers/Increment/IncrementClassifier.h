@@ -360,7 +360,7 @@ class IncrementClassifier : public LoopClassifier {
                                                      E = Block->succ_end();
                                                      I != E; I++) {
             const NaturalLoopBlock *Succ = *I;
-            Worklist.push(Succ);
+            if (Succ) Worklist.push(Succ);
           }
         }
 
