@@ -387,7 +387,8 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         for (CFGBlock::const_succ_iterator it2 = Tail->succ_begin(); it2 != Tail->succ_end(); it2++) {
           const CFGBlock *Header = *it2;
           // if Tail -> Header is a back edge
-          if (Dom.dominates(Header, Tail) && Dom.isReachableFromEntry(Tail)) {  // TODO
+          if (Dom.dominates(Header, Tail) and
+              Dom.isReachableFromEntry(Tail)) {  // Unreachable nodes are dominated by everything
             // collect loop blocks via DFS on reverse CFG
             std::set<const CFGBlock*> Body = { Header };
             std::stack<const CFGBlock*> worklist;

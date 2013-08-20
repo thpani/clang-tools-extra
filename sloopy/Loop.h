@@ -425,6 +425,7 @@ void NaturalLoop::build(
       if (TrackedStmts != NULL && TrackedStmts->count(S) == 0) continue;
       CBlock->Stmts.push_back(S);
     }
+    assert(Map.find(Current) == Map.end());
     Map[Current] = CBlock;
     Blocks.push_back(CBlock);
   }
