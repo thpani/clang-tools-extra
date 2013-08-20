@@ -136,7 +136,9 @@ static const std::set<const CFGBlock*> getExitingTerminatorConditions(const std:
                                        E = Block->succ_end();
                                        I != E; I++) {
       const CFGBlock *Succ = *I;
+      if (not Succ) continue;
       if (isTransitionBlock(Succ)) continue;
+      // edge Block->Succ leaves the loop
       if (Blocks.count(Succ) == 0) {
         if (Block->getTerminatorCondition()) {
           Result.insert(Block);
