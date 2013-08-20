@@ -436,25 +436,24 @@ void NaturalLoop::build(
                                        I != E; I++) {
       const CFGBlock *Succ = *I;
       if (Succ) {
-      NaturalLoopBlock *CSuccBlock;
-      if (Map.find(Succ) == Map.end()) {
-        CSuccBlock = Exit;
-      }
-      else {
-        CSuccBlock = Map[Succ];
-      }
+        NaturalLoopBlock *CSuccBlock;
+        if (Map.find(Succ) == Map.end()) {
+          CSuccBlock = Exit;
+        }
+        else {
+          CSuccBlock = Map[Succ];
+        }
         Map[Current]->Succs.insert(CSuccBlock);
         CSuccBlock->Preds.insert(Map[Current]);
       } else {
         Map[Current]->Succs.insert(NULL);
+      }
     }
   }
   Entry->Succs.insert(Map[Header]);
   Map[Header]->Preds.insert(Entry);
   Blocks.push_back(Exit);
   Blocks.push_back(Entry);
-
-  }
 
   // reduce
   if (TrackedStmts != NULL) {
