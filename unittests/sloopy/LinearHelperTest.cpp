@@ -85,42 +85,11 @@ TEST(LinearHelperTest, testZ3Converter) {
   EXPECT_EQ("j", e.arg(1).arg(1).decl().name().str());
 }
 
-TEST(LinearHelperTest, testLinear) {
-  context c;
-  expr x = c.int_const("x");
-  expr y = c.int_const("y");
-  const sort *domainF  = { };
-  const sort domainG[] = { c.int_sort() };
-  const expr *noargs = { };
-  func_decl f = c.function("FUNC_f", 0, domainF, c.int_sort());
-  func_decl g = c.function("FUNC_g", 1, domainG, c.int_sort());
-
-  LinearHelper H;
-  EXPECT_TRUE ( H.isLinearIn(x,   0*x     +1)); EXPECT_EQ(  0, H.getM()); EXPECT_EQ( 1, H.getB());
-  EXPECT_TRUE ( H.isLinearIn(x,     x       )); EXPECT_EQ(  1, H.getM()); EXPECT_EQ( 0, H.getB());
-  EXPECT_TRUE ( H.isLinearIn(x,    -x       )); EXPECT_EQ( -1, H.getM()); EXPECT_EQ( 0, H.getB());
-  EXPECT_TRUE ( H.isLinearIn(x,   1*x     +1)); EXPECT_EQ(  1, H.getM()); EXPECT_EQ( 1, H.getB());
-  EXPECT_TRUE ( H.isLinearIn(x,   3*x     +1)); EXPECT_EQ(  3, H.getM()); EXPECT_EQ( 1, H.getB());
-  EXPECT_TRUE ( H.isLinearIn(x, -42*x     +1)); EXPECT_EQ(-42, H.getM()); EXPECT_EQ( 1, H.getB());
-  EXPECT_TRUE ( H.isLinearIn(x,     x     +1)); EXPECT_EQ(  1, H.getM()); EXPECT_EQ( 1, H.getB());
-  EXPECT_TRUE ( H.isLinearIn(x,     x     -4)); EXPECT_EQ(  1, H.getM()); EXPECT_EQ(-4, H.getB());
-  EXPECT_TRUE ( H.isLinearIn(x,     x-4  * (x+2) )); EXPECT_EQ(-3, H.getM()); EXPECT_EQ(-8, H.getB());
-  EXPECT_FALSE( H.isLinearIn(x,    x*x           ));
-  EXPECT_FALSE( H.isLinearIn(x,    (x-4) * (x+2) ));
-  EXPECT_TRUE ( H.isLinearIn(x,    x + y         ));
-  EXPECT_TRUE ( H.isLinearIn(x,    x * y         ));
-  EXPECT_TRUE ( H.isLinearIn(x,    x + f(0, noargs) ));
-  EXPECT_TRUE ( H.isLinearIn(x,    x * f(0, noargs) ));
-  EXPECT_TRUE ( H.isLinearIn(x,    x + g(y)  ));
-  EXPECT_TRUE ( H.isLinearIn(x,    x * g(y)  ));
-  EXPECT_FALSE( H.isLinearIn(x,    x + g(x)  ));
-  EXPECT_FALSE( H.isLinearIn(x,    x * g(x)  ));
-}
-
 TEST(LinearHelperTest, testMonotonic) {
   context c;
   expr x = c.int_const("x");
   expr y = c.int_const("y");
+  expr z = c.int_const("z");
   const sort *domainF  = { };
   const sort domainG[] = { c.int_sort() };
   const expr *noargs = { };
@@ -128,29 +97,94 @@ TEST(LinearHelperTest, testMonotonic) {
   func_decl g = c.function("FUNC_g", 1, domainG, c.int_sort());
 
   LinearHelper H;
-  EXPECT_EQ(Constant,   H.isMonotonicIn(x,   0*x     +1));
-  EXPECT_EQ(StrictIncreasing, H.isMonotonicIn(x,     x       ));
-  EXPECT_EQ(StrictDecreasing, H.isMonotonicIn(x,    -x       ));
-  EXPECT_EQ(StrictIncreasing, H.isMonotonicIn(x,   1*x     +1));
-  EXPECT_EQ(StrictIncreasing, H.isMonotonicIn(x,   3*x     +1));
-  EXPECT_EQ(StrictDecreasing, H.isMonotonicIn(x, -42*x     +1));
-  EXPECT_EQ(StrictIncreasing, H.isMonotonicIn(x,     x     +1));
-  EXPECT_EQ(StrictIncreasing, H.isMonotonicIn(x,     x     -4));
-  EXPECT_EQ(StrictDecreasing, H.isMonotonicIn(x,     x-4  * (x+2) ));
-  EXPECT_EQ(NotMonotone,  H.isMonotonicIn(x,    x*x           ));
-  EXPECT_EQ(NotMonotone,  H.isMonotonicIn(x,    (x-4) * (x+2) ));
-  EXPECT_EQ(StrictIncreasing, H.isMonotonicIn(x,    x + y         ));
-  EXPECT_EQ(UnknownDirection, H.isMonotonicIn(x,    x * y         ));
-  EXPECT_EQ(StrictIncreasing, H.isMonotonicIn(x,    x + f(0, noargs) ));
-  EXPECT_EQ(UnknownDirection, H.isMonotonicIn(x,    x * f(0, noargs) ));
-  EXPECT_EQ(StrictIncreasing, H.isMonotonicIn(x,    x + g(y)  ));
-  EXPECT_EQ(UnknownDirection, H.isMonotonicIn(x,    x * g(y)  ));
-  EXPECT_EQ(NotMonotone, H.isMonotonicIn(x,    x + g(x)  ));
-  EXPECT_EQ(NotMonotone, H.isMonotonicIn(x,    x * g(x)  ));
-  EXPECT_EQ(StrictDecreasing, H.isMonotonicIn(x, x < y   ));
-  EXPECT_EQ(StrictDecreasing, H.isMonotonicIn(x, x <= y  ));
-  EXPECT_EQ(StrictDecreasing, H.isMonotonicIn(x, y > x   ));
-  EXPECT_EQ(StrictDecreasing, H.isMonotonicIn(x, y >= x  ));
+  EXPECT_EQ(Constant,   H.isLinearIn(x,   0*x     +1));
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,     x       ));
+  EXPECT_EQ(StrictDecreasing, H.isLinearIn(x,    -x       ));
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,   1*x     +1));
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,   3*x     +1));
+  EXPECT_EQ(StrictDecreasing, H.isLinearIn(x, -42*x     +1));
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,     x     +1));
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,     x     -4));
+  EXPECT_EQ(StrictDecreasing, H.isLinearIn(x,     x-4  * (x+2) ));
+  EXPECT_EQ(NotMonotone,  H.isLinearIn(x,    x*x           ));
+  EXPECT_EQ(NotMonotone,  H.isLinearIn(x,    (x-4) * (x+2) ));
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,    x + y         ));
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,    x + y + z     ));
+  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    x * y         ));
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,    x + f(0, noargs) ));
+  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    x * f(0, noargs) ));
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,    x + g(y)  ));
+  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    x * g(y)  ));
+  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    4*x*y));
+  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    4*x*f(0, noargs)));
+  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    4*x*f(0, noargs) + f(0, noargs) + 2));
+  EXPECT_EQ(NotMonotone, H.isLinearIn(x,    x + g(x)  ));
+  EXPECT_EQ(NotMonotone, H.isLinearIn(x,    x * g(x)  ));
+}
+
+TEST(LinearHelperTest, testDropsToZero) {
+  context c;
+  expr x = c.int_const("x");
+  expr y = c.int_const("y");
+  const sort *domainF  = { };
+  const sort domainG[] = { c.int_sort() };
+  const expr *noargs = { };
+  func_decl f = c.function("FUNC_f", 0, domainF, c.int_sort());
+  func_decl g = c.function("FUNC_g", 1, domainG, c.int_sort());
+
+  {
+  LinearHelper H;
+  EXPECT_TRUE(H.dropsToZero(x, x < y , 1));
+  EXPECT_TRUE(H.getAssumptions().none());
+  }
+  {
+  LinearHelper H;
+  EXPECT_TRUE(H.dropsToZero(x, x <= y, 1));
+  /* EXPECT_FALSE(H.getAssumptions()[0]); */
+  EXPECT_TRUE(H.getAssumptions()[1]);
+  EXPECT_FALSE(H.getAssumptions()[2]);
+  }
+  {
+  LinearHelper H;
+  EXPECT_TRUE(H.dropsToZero(x, x > y , 1));
+  /* EXPECT_TRUE(H.getAssumptions()[0]); */
+  EXPECT_FALSE(H.getAssumptions()[1]);
+  EXPECT_FALSE(H.getAssumptions()[2]);
+  }
+  {
+  LinearHelper H;
+  EXPECT_TRUE(H.dropsToZero(x, x >= y, 1));
+  /* EXPECT_TRUE(H.getAssumptions()[0]); */
+  EXPECT_FALSE(H.getAssumptions()[1]);
+  EXPECT_TRUE(H.getAssumptions()[2]);
+  }
+
+  {
+  LinearHelper H;
+  EXPECT_TRUE(H.dropsToZero(x, x < y , -1));
+  /* EXPECT_TRUE(H.getAssumptions()[0]); */
+  EXPECT_FALSE(H.getAssumptions()[1]);
+  EXPECT_FALSE(H.getAssumptions()[2]);
+  }
+  {
+  LinearHelper H;
+  EXPECT_TRUE(H.dropsToZero(x, x <= y, -1));
+  /* EXPECT_TRUE(H.getAssumptions()[0]); */
+  EXPECT_TRUE(H.getAssumptions()[1]);
+  EXPECT_FALSE(H.getAssumptions()[2]);
+  }
+  {
+  LinearHelper H;
+  EXPECT_TRUE(H.dropsToZero(x, x > y , -1));
+  EXPECT_TRUE(H.getAssumptions().none());
+  }
+  {
+  LinearHelper H;
+  EXPECT_TRUE(H.dropsToZero(x, x >= y, -1));
+  /* EXPECT_FALSE(H.getAssumptions()[0]); */
+  EXPECT_FALSE(H.getAssumptions()[1]);
+  EXPECT_TRUE(H.getAssumptions()[2]);
+  }
 }
 
 TEST(LinearHelperTest, testLinearHelperWithConverter) {
@@ -161,5 +195,5 @@ TEST(LinearHelperTest, testLinearHelperWithConverter) {
 
   res = z3Expr("void a() { int i,j; if ((3*i) + (6%4)) {} }", e);
   EXPECT_TRUE(res);
-  EXPECT_TRUE(H.isLinearIn(e.arg(0).arg(1), e)); EXPECT_EQ(3, H.getM()); EXPECT_EQ(2, H.getB());
+  EXPECT_TRUE(H.isLinearIn(e.arg(0).arg(1), e));
 }
