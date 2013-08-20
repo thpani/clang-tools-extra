@@ -220,7 +220,7 @@ class IncrementClassifier : public LoopClassifier {
         if (Unknown or Other.Unknown) return UnknownAugInt();
         if ((Value > 0 and Other.Value > 0 and Value > (std::numeric_limits<longest_int>::max() - Other.Value)) or 
             (Value < 0 and Other.Value < 0 and Value < (std::numeric_limits<longest_int>::min() - Other.Value))) {
-          llvm::errs() << "Overflow\n";
+          llvm_unreachable("overflow");
           return UnknownAugInt();
         }
         return AugInt(Value + Other.Value);
@@ -275,6 +275,8 @@ class IncrementClassifier : public LoopClassifier {
     };
 
     CheckBodyResult checkBody(const NaturalLoop *L, const IncrementInfo I) const throw () {
+#undef DEBUG_TYPE
+#define DEBUG_TYPE "checkBody"
       const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
       LoopVariableFinder Finder(this);
 
@@ -311,6 +313,8 @@ class IncrementClassifier : public LoopClassifier {
         const NaturalLoopBlock *Block = Worklist.top();
         Worklist.pop();
 
+        DEBUG( llvm::dbgs() << "Processing worklist item " << Block->getBlockID() << "\n" );
+
         // meet (propagate OUT -> IN)
         unsigned max = 0;
         unsigned min = std::numeric_limits<unsigned>::max();
@@ -320,6 +324,7 @@ class IncrementClassifier : public LoopClassifier {
                                                     P != E; P++) {    // (5)
           const NaturalLoopBlock *Pred = *P;
           if (Pred == &L->getEntry()) continue;
+          DEBUG( llvm::dbgs() << "propagation from WL item's pred " << Pred->getBlockID() << "\n" );
           max = Out[Pred].MaxAssignments > max ? Out[Pred].MaxAssignments : max;
           min = Out[Pred].MinAssignments < min ? Out[Pred].MinAssignments : min;
           allIncs.insert(Out[Pred].AccumulatedIncrement.begin(), Out[Pred].AccumulatedIncrement.end());
@@ -366,20 +371,26 @@ class IncrementClassifier : public LoopClassifier {
 
         Out[Block] = NewOut;
 
-/*         llvm::errs() << Block->getBlockID() << "\nIn: "; */
-/*         for (auto X : In[Block].AccumulatedIncrement) */
-/*           llvm::errs() << X.str() << ","; */
-/*         llvm::errs() << "\nOut: "; */
-/*         for (auto X : Out[Block].AccumulatedIncrement) */
-/*           llvm::errs() << X.str() << ","; */
-/*         llvm::errs() << "\n"; */
+        DEBUG(
+          llvm::dbgs() << Block->getBlockID() << "\nIn: ";
+          for (auto X : In[Block].AccumulatedIncrement)
+            llvm::dbgs() << X.str() << ",";
+          llvm::dbgs() << "\nOut: ";
+          for (auto X : Out[Block].AccumulatedIncrement)
+            llvm::dbgs() << X.str() << ",";
+          llvm::dbgs() << "\n";
+        );
       }
-      /* llvm::errs() << "\n===\n"; */
-      /* for (auto X : In[Header].AccumulatedIncrement) */
-      /*   llvm::errs() << X.str() << ","; */
-      /* llvm::errs() << "\n===\n"; */
+      DEBUG(
+        llvm::dbgs() << "----\nIn[Header]: ";
+        for (auto X : In[Header].AccumulatedIncrement)
+          llvm::dbgs() << X.str() << ",";
+        llvm::dbgs() << "\n===\n";
+      );
 
       return In[Header];
+#undef DEBUG_TYPE
+#define DEBUG_TYPE ""
     }
 
   protected:
@@ -395,21 +406,25 @@ class IncrementClassifier : public LoopClassifier {
     virtual ~IncrementClassifier() {}
 
     void classifyProve(const NaturalLoop *Loop) const throw () {
+#undef DEBUG_TYPE
+#define DEBUG_TYPE "prove"
       if (LoopClassifier::hasClass(Loop, "Proved")) return;
 
       LoopVariableFinder Finder(this);
       const std::set<IncrementInfo> LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
-      std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks;
+      DEBUG( llvm::dbgs() << "Number of loop var candidates: " << LoopVarCandidates.size() << "\n"; );
 
       InvariantVarFinder F(Loop);
 
       // restrict loop var candidates to those incremented on each path
       std::set<IncrementInfo> LoopVarCandidatesEachPath;
       for (const IncrementInfo I : LoopVarCandidates) {
+        DEBUG( llvm::dbgs() << "Checking candidate " << I.VD->getNameAsString() << "... " );
         auto MaxMin = checkBody(Loop, I);
         if (MaxMin.MinAssignments < 1) {
           // there must be >= 1 assignments on each path
           continue;
+          DEBUG( llvm::dbgs() << "fail. <1 assignment on each path\n" );
         }
         bool iAssignedOutsideIncrement = false;
         for (InvariantVarFinder::def_stmt_iter P = F.def_stmt_begin(I.VD),
@@ -432,17 +447,20 @@ class IncrementClassifier : public LoopClassifier {
         }
         if (iAssignedOutsideIncrement) {
           continue;
+          DEBUG( llvm::dbgs() << "fail. assigned outside increment\n" );
         }
+        DEBUG( llvm::dbgs() << "ok\n" );
         LoopVarCandidatesEachPath.insert(I);
       }
 
       llvm::BitVector Assumption(3);
+      std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks;
       // find provably terminating blocks
       for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
                                                  PE = Loop->getExit().pred_end();
                                                  PI != PE; PI++) {
         const NaturalLoopBlock *Block = *PI;
-        // TODO dealing with case is more complex (compare labels):
+        // TODO dealing with switch/case is more complex (compare labels):
         if (Block->getTerminator()->getStmtClass() == Stmt::SwitchStmtClass) {
           continue;
         }
@@ -464,9 +482,12 @@ class IncrementClassifier : public LoopClassifier {
         }
         assert(foundExit);
         assert(0 <= whichBranch and whichBranch <= 1);
-        /* llvm::errs() << "Cand: " << LoopVarCandidatesEachPath.size() << "\n"; */
-        DEBUG( Cond->printPretty(llvm::dbgs(), NULL, PrintingPolicy(LangOptions())); llvm::dbgs() << "\n"; );
-        DEBUG( llvm::dbgs() << "Branch: " << whichBranch << "\n" );
+        DEBUG( 
+            llvm::dbgs() << "Trying to prove condition\n";
+            Cond->printPretty(llvm::dbgs(), NULL, PrintingPolicy(LangOptions())); llvm::dbgs() << "\n";
+            llvm::dbgs() << "on branch: " << (not whichBranch) << "\n"
+                         << "for " << LoopVarCandidatesEachPath.size() << " candidate variables.\n";
+        );
         for (const IncrementInfo I : LoopVarCandidatesEachPath) {
           LinearHelper H;
 
