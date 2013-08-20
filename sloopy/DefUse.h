@@ -19,7 +19,7 @@ class DefUseHelper : public ConstStmtVisitor<DefUseHelper> {
     const Stmt *Stmt;
 
     void RunAnalysis() {
-      if (AnalysisRun) return;
+      if (AnalysisRun or Stmt == NULL) return;
       Edits.push(Stmt);
       Visit(Stmt);
       Edits.pop();
