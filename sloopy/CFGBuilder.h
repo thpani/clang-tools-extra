@@ -340,6 +340,9 @@ class FunctionCallback : public MatchFinder::MatchCallback {
     virtual void run(const MatchFinder::MatchResult &Result) {
       const FunctionDecl *D = Result.Nodes.getNodeAs<FunctionDecl>(FunctionName);
       if (!D->hasBody()) return;
+      if (Function != "" and D->getNameAsString() != Function) return;
+      llvm::errs() << "Processing: " << Result.SourceManager->getPresumedLoc(D->getLocation()).getFilename() << " " << D->getNameAsString() << "\n";
+      llvm::errs().flush();
 
       std::map<const CFGBlock*, std::vector<LoopDescriptor>> Loops;
 
