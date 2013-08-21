@@ -526,6 +526,7 @@ void NaturalLoop::build(
         // no stmts in this block
         DEBUG(llvm::dbgs() << "needs reduction\n");
 
+        bool removeBlock = true;
         for (NaturalLoopBlock::const_pred_iterator PI = Current->pred_begin(),
                                                   PE = Current->pred_end();
                                                   PI != PE; PI++) {
@@ -535,12 +536,15 @@ void NaturalLoop::build(
                                                       SI != SE; SI++) {
             NaturalLoopBlock *Succ = *SI;
             if (not Succ) continue;
-            NaturalLoopBlock *NewSucc = Succ != Current ? Succ : Pred;
+            // TODO handle self-loops better
+            if (Succ == Current or Pred == Current) {
+              removeBlock = false;
+              continue;
+            }
 
-            DEBUG(llvm::dbgs() << "\tRedirecting (" << Pred->getBlockID() << "," << Current->getBlockID() << ") to " << NewSucc->getBlockID() << "\n");
             std::replace(Pred->Succs.begin(), Pred->Succs.end(), Current, Succ);
-            DEBUG(llvm::dbgs() << "\tAdding " << Pred->getBlockID() << " to " << NewSucc->getBlockID() << "'s preds\n");
-            NewSucc->Preds.push_back(Pred);
+            DEBUG(llvm::dbgs() << "\tAdding " << Pred->getBlockID() << " to " << Succ->getBlockID() << "'s preds\n");
+            Succ->Preds.push_back(Pred);
           }
         }
         for (NaturalLoopBlock::const_succ_iterator SI = Current->succ_begin(),
@@ -551,9 +555,13 @@ void NaturalLoop::build(
           DEBUG(llvm::dbgs() << "\tRemoving " << Current->getBlockID() << " from " << Succ->getBlockID() << "'s preds\n");
           Succ->Preds.remove(Current);
         }
-        DEBUG(llvm::dbgs() << "\tDeleting " << Current->getBlockID() << "\n");
-        BI = Blocks.erase(BI);
-        delete Current;
+        if (removeBlock) {
+          DEBUG(llvm::dbgs() << "\tDeleting " << Current->getBlockID() << "\n");
+          BI = Blocks.erase(BI);
+          delete Current;
+        } else {
+          BI++;
+        }
       }
       else {
         DEBUG(llvm::dbgs() << "doesn't need reduction\n");
