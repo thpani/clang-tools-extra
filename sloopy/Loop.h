@@ -469,49 +469,49 @@ void NaturalLoop::build(
   Blocks.push_back(Exit);
   Blocks.push_back(Entry);
 
-  // remove transition blocks
-  DEBUG(llvm::dbgs() << "Removing transition blocks...\n");
-  for (NaturalLoop::iterator I = Blocks.begin(),
-                             E = Blocks.end();
-                             I != E;) {
-    NaturalLoopBlock *Block = *I;
-    if (Block == Entry or Block == Exit) {
-      I++;
-      continue;
-    }
-    if (isTransitionBlock(Block)) {
-      // we found a transition block
-
-      assert(Block->succ_size() == 1);
-
-      NaturalLoopBlock *Succ = *Block->succ_begin();
-      assert(Succ != Block);
-
-      for (NaturalLoopBlock::pred_iterator PI = Block->pred_begin(),
-                                   PE = Block->pred_end();
-                                   PI != PE; PI++) {
-        /* [Pred] -> [Block] -> [Succ]
-         *             =>
-         * [Pred] ------------> [Succ]
-         */
-        NaturalLoopBlock *Pred = *PI;
-        assert(Pred != Block);
-
-        DEBUG(llvm::dbgs() << "\tRedirecting (" << Pred->getBlockID() << "," << Block->getBlockID() << ") to " << Succ->getBlockID() << "\n");
-        std::replace(Pred->Succs.begin(), Pred->Succs.end(), Block, Succ);
-        Succ->Preds.push_back(Pred);
-      }
-      Succ->Preds.remove(Block);
-      DEBUG(llvm::dbgs() << "\tDeleting " << Block->getBlockID() << "\n");
-      I = Blocks.erase(I);
-      delete Block;
-    } else {
-      I++;
-    }
-  }
-
   // reduce
-  if (TrackedStmts != NULL) {
+  if (TrackedStmts == NULL) {
+    // remove transition blocks
+    DEBUG(llvm::dbgs() << "Removing transition blocks...\n");
+    for (NaturalLoop::iterator I = Blocks.begin(),
+                              E = Blocks.end();
+                              I != E;) {
+      NaturalLoopBlock *Block = *I;
+      if (Block == Entry or Block == Exit) {
+        I++;
+        continue;
+      }
+      if (isTransitionBlock(Block)) {
+        // we found a transition block
+
+        assert(Block->succ_size() == 1);
+
+        NaturalLoopBlock *Succ = *Block->succ_begin();
+        assert(Succ != Block);
+
+        for (NaturalLoopBlock::pred_iterator PI = Block->pred_begin(),
+                                    PE = Block->pred_end();
+                                    PI != PE; PI++) {
+          /* [Pred] -> [Block] -> [Succ]
+          *             =>
+          * [Pred] ------------> [Succ]
+          */
+          NaturalLoopBlock *Pred = *PI;
+          assert(Pred != Block);
+
+          DEBUG(llvm::dbgs() << "\tRedirecting (" << Pred->getBlockID() << "," << Block->getBlockID() << ") to " << Succ->getBlockID() << "\n");
+          std::replace(Pred->Succs.begin(), Pred->Succs.end(), Block, Succ);
+          Succ->Preds.push_back(Pred);
+        }
+        Succ->Preds.remove(Block);
+        DEBUG(llvm::dbgs() << "\tDeleting " << Block->getBlockID() << "\n");
+        I = Blocks.erase(I);
+        delete Block;
+      } else {
+        I++;
+      }
+    }
+  } else {
     for (NaturalLoop::iterator BI = Blocks.begin(),
                                BE = Blocks.end();
                                BI != BE; ) {
