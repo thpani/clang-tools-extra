@@ -559,7 +559,7 @@ class IncrementClassifier : public LoopClassifier {
     }
 
     std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const throw () {
-      classifyProve(Loop);
+      /* classifyProve(Loop); */
 
       // do we have the right # of exit arcs?
       unsigned PredSize = Loop->getExit().pred_size();

@@ -384,6 +384,8 @@ void NaturalLoop::build(
     const std::set<const CFGBlock*> *TrackedBlocks,
     const NaturalLoop *Unsliced) {
 
+#undef DEBUG_TYPE
+#define DEBUG_TYPE "buildNaturalLoop"
 
   assert(TrackedStmts != NULL || TrackedBlocks == NULL);
   assert(TrackedStmts == NULL || TrackedBlocks != NULL);
@@ -455,74 +457,58 @@ void NaturalLoop::build(
   Blocks.push_back(Exit);
   Blocks.push_back(Entry);
 
-#undef DEBUG_TYPE
-#define DEBUG_TYPE "buildNaturalLoop"
   // reduce
   if (TrackedStmts != NULL) {
-    llvm::DominatorTreeBase<NaturalLoopBlock> PDT(true);
-    PDT.recalculate(*const_cast<NaturalLoop*>(this));
     for (NaturalLoop::iterator BI = Blocks.begin(),
                                BE = Blocks.end();
                                BI != BE; ) {
       NaturalLoopBlock *Current = *BI;
-    DEBUG(llvm::dbgs() << "Trying to reduce block " << Current->getBlockID() << "...\n");
-    if (Current == Entry || Current == Exit) {
-      DEBUG(llvm::dbgs() << "pseudo-block, skipping\n");
-      BI++;
-      continue;
-    }
+      DEBUG(llvm::dbgs() << "Trying to reduce block " << Current->getBlockID() << "... ");
+      if (Current == Entry || Current == Exit) {
+        DEBUG(llvm::dbgs() << "pseudo-block, skipping\n");
         BI++;
         continue;
       }
-    if (Current->begin() == Current->end() and Current->getTerminator().getStmt() == NULL) {
-      DEBUG(llvm::dbgs() << "needs reduction\n");
+      if (Current->begin() == Current->end() and Current->getTerminator().getStmt() == NULL) {
         // no stmts in this block
-        for (NaturalLoopBlock::const_pred_iterator I = Current->pred_begin(),
-                                                   E = Current->pred_end();
-                                                   I != E; I++) {
-          NaturalLoopBlock *Pred = *I;
+        DEBUG(llvm::dbgs() << "needs reduction\n");
 
-          NaturalLoopBlock *PostDom = Current;
-          do {
-            PostDom = PDT.getNode(PostDom)->getIDom()->getBlock();
-          } while (std::find(Blocks.begin(), Blocks.end(), PostDom) == Blocks.end());
+        for (NaturalLoopBlock::const_pred_iterator PI = Current->pred_begin(),
+                                                  PE = Current->pred_end();
+                                                  PI != PE; PI++) {
+          NaturalLoopBlock *Pred = *PI;
+          for (NaturalLoopBlock::const_succ_iterator SI = Current->succ_begin(),
+                                                      SE = Current->succ_end();
+                                                      SI != SE; SI++) {
+            NaturalLoopBlock *Succ = *SI;
+            if (not Succ) continue;
+            NaturalLoopBlock *NewSucc = Succ != Current ? Succ : Pred;
 
-          // redirect pointer Pred->Current to Pred->PostDom
-          for (NaturalLoopBlock::const_succ_iterator SI = Pred->Succs.begin(),
-                                                 SE = Pred->Succs.end();
-                                                 SI != SE;) {
-            if (*SI == Current) {
-              SI = Pred->Succs.erase(SI);
-            } else {
-              SI++;
-            }
+            DEBUG(llvm::dbgs() << "\tRedirecting (" << Pred->getBlockID() << "," << Current->getBlockID() << ") to " << NewSucc->getBlockID() << "\n");
+            /* std::replace(Pred->Succs.begin(), Pred->Succs.end(), Current, Succ); */
+            Pred->Succs.erase(Current);
+            Pred->Succs.insert(NewSucc);
+            /* std::replace(Succ->Preds.begin(), Succ->Preds.end(), Current, Pred); */
+            DEBUG(llvm::dbgs() << "\tAdding " << Pred->getBlockID() << " to " << NewSucc->getBlockID() << "'s preds\n");
+            NewSucc->Preds.insert(Pred);
           }
-          Pred->Succs.insert(PostDom);
-          PostDom->Preds.insert(Pred);
-          /* std::cerr << "Redirecting (" << Pred->getBlockID() << "," << Current->getBlockID() << ") to " << PostDom->getBlockID() << "\n"; */
         }
-        // for all successors: remove me as pred, add postdom as pred
-        for (NaturalLoopBlock::const_succ_iterator I = Current->succ_begin(),
-                                                   E = Current->succ_end();
-                                                   I != E; I++) {
-          NaturalLoopBlock *Succ = *I;
+        for (NaturalLoopBlock::const_succ_iterator SI = Current->succ_begin(),
+                                                    SE = Current->succ_end();
+                                                    SI != SE; SI++) {
+          NaturalLoopBlock *Succ = *SI;
           if (not Succ) continue;
-          for (NaturalLoopBlock::const_pred_iterator PI = Succ->Preds.begin(),
-                                                 PE = Succ->Preds.end();
-                                                 PI != PE;) {
-            if (*PI == Current) {
-              PI = Succ->Preds.erase(PI);
-            } else {
-              PI++;
-            }
-          }
+          DEBUG(llvm::dbgs() << "\tRemoving " << Current->getBlockID() << " from " << Succ->getBlockID() << "'s preds\n");
+          Succ->Preds.erase(Current);
         }
+        DEBUG(llvm::dbgs() << "\tDeleting " << Current->getBlockID() << "\n");
         BI = Blocks.erase(BI);
-        /* BI = Blocks.erase(std::remove(Blocks.begin(), Blocks.end(), Current), Blocks.end()); */
-        /* std::cerr << "Deleting " << Current->getBlockID() << "\n"; */
         delete Current;
       }
-      else { BI++; }
+      else {
+        DEBUG(llvm::dbgs() << "doesn't need reduction\n");
+        BI++;
+      }
     }
   }
 

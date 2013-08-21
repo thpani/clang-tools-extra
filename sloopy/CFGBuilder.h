@@ -193,7 +193,7 @@ static const NaturalLoop *buildNaturalLoop(
   std::set<const CFGBlock*> VisitedBlocks;
   std::set<const Stmt*> TrackedStmts;
   std::set<const VarDecl*> ControlVars(SC.Vars);
-  std::set<const CFGBlock*> TrackedBlocks(SC.Locations);
+  std::set<const CFGBlock*> TrackedBlocks;
   size_t OldSize;
   do {
     OldSize = TrackedStmts.size();
@@ -512,7 +512,8 @@ class FunctionCallback : public MatchFinder::MatchCallback {
             const Stmt *S = getGotoLCA(Unsliced->getLoopStmt(), D);
             S->dump();
           }
-          if (ViewSliced || ViewSlicedOuter || ViewUnsliced) {
+          if (ViewSliced || ViewSlicedOuter || ViewUnsliced or
+              DumpSliced || DumpSlicedOuter || DumpUnsliced) {
             llvm::errs() << "Back edges: ";
             for (auto Tail : MLD.Tails) {
               llvm::errs() << Tail->getBlockID();
@@ -527,6 +528,10 @@ class FunctionCallback : public MatchFinder::MatchCallback {
             if (ViewSliced) SlicedAllLoops->view();
             if (ViewSlicedOuter) SlicedOuterLoop->view();
             if (ViewUnsliced) Unsliced->view();
+
+            if (DumpSliced) SlicedAllLoops->dump();
+            if (DumpSlicedOuter) SlicedOuterLoop->dump();
+            if (DumpUnsliced) Unsliced->dump();
           }
         }
 
