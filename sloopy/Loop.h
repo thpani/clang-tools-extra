@@ -10,6 +10,17 @@ using namespace clang;
 
 namespace sloopy {
 
+template<class BlockT>
+bool isTransitionBlock(const BlockT *Block) {
+  if (Block->begin() == Block->end() &&    // no statements
+      Block->getTerminator() == NULL && Block->getLabel() == NULL &&
+      Block->succ_size() == 1) // EXIT has 0
+    {
+      return true;
+    }
+  return false;
+}
+
 class MergedLoopDescriptor {
   public:
   const CFGBlock *Header;
@@ -233,7 +244,7 @@ class NaturalLoopBlock {
     const NaturalLoopTerminator Terminator;
 
     std::list<const Stmt*> Stmts;
-    std::set<NaturalLoopBlock *> Succs, Preds;
+    std::list<NaturalLoopBlock *> Succs, Preds;
   public:
     NaturalLoopBlock(unsigned BlockID, const Stmt *LabelStmt = NULL, const Stmt *TerminatorStmt = NULL) :
       BlockID(BlockID), Label(LabelStmt), Terminator(TerminatorStmt) {}
@@ -254,8 +265,8 @@ class NaturalLoopBlock {
     const_iterator             begin()       const { return Stmts.begin();   }
     const_iterator             end()         const { return Stmts.end();     }
 
-    typedef std::set<NaturalLoopBlock *>::iterator             succ_iterator;
-    typedef std::set<NaturalLoopBlock *>::const_iterator const_succ_iterator;
+    typedef std::list<NaturalLoopBlock *>::iterator             succ_iterator;
+    typedef std::list<NaturalLoopBlock *>::const_iterator const_succ_iterator;
 
     succ_iterator                succ_begin()        { return Succs.begin();   }
     succ_iterator                succ_end()          { return Succs.end();     }
@@ -265,8 +276,8 @@ class NaturalLoopBlock {
     unsigned                     succ_size()   const { return Succs.size();    }
     bool                         succ_empty()  const { return Succs.empty();   }
 
-    typedef std::set<NaturalLoopBlock *>::iterator             pred_iterator;
-    typedef std::set<NaturalLoopBlock *>::const_iterator const_pred_iterator;
+    typedef std::list<NaturalLoopBlock *>::iterator             pred_iterator;
+    typedef std::list<NaturalLoopBlock *>::const_iterator const_pred_iterator;
 
     pred_iterator                pred_begin()        { return Preds.begin();   }
     pred_iterator                pred_end()          { return Preds.end();     }
@@ -431,6 +442,7 @@ void NaturalLoop::build(
     Map[Current] = CBlock;
     Blocks.push_back(CBlock);
   }
+
   // add successors/predecessors to blocks
   for (auto Current : CFGBlocks) {
     for (CFGBlock::const_succ_iterator I = Current->succ_begin(),
@@ -445,17 +457,58 @@ void NaturalLoop::build(
         else {
           CSuccBlock = Map[Succ];
         }
-        Map[Current]->Succs.insert(CSuccBlock);
-        CSuccBlock->Preds.insert(Map[Current]);
+        Map[Current]->Succs.push_back(CSuccBlock);
+        CSuccBlock->Preds.push_back(Map[Current]);
       } else {
-        Map[Current]->Succs.insert(NULL);
+        Map[Current]->Succs.push_back(NULL);
       }
     }
   }
-  Entry->Succs.insert(Map[Header]);
-  Map[Header]->Preds.insert(Entry);
+  Entry->Succs.push_back(Map[Header]);
+  Map[Header]->Preds.push_back(Entry);
   Blocks.push_back(Exit);
   Blocks.push_back(Entry);
+
+  // remove transition blocks
+  DEBUG(llvm::dbgs() << "Removing transition blocks...\n");
+  for (NaturalLoop::iterator I = Blocks.begin(),
+                             E = Blocks.end();
+                             I != E;) {
+    NaturalLoopBlock *Block = *I;
+    if (Block == Entry or Block == Exit) {
+      I++;
+      continue;
+    }
+    if (isTransitionBlock(Block)) {
+      // we found a transition block
+
+      assert(Block->succ_size() == 1);
+
+      NaturalLoopBlock *Succ = *Block->succ_begin();
+      assert(Succ != Block);
+
+      for (NaturalLoopBlock::pred_iterator PI = Block->pred_begin(),
+                                   PE = Block->pred_end();
+                                   PI != PE; PI++) {
+        /* [Pred] -> [Block] -> [Succ]
+         *             =>
+         * [Pred] ------------> [Succ]
+         */
+        NaturalLoopBlock *Pred = *PI;
+        assert(Pred != Block);
+
+        DEBUG(llvm::dbgs() << "\tRedirecting (" << Pred->getBlockID() << "," << Block->getBlockID() << ") to " << Succ->getBlockID() << "\n");
+        std::replace(Pred->Succs.begin(), Pred->Succs.end(), Block, Succ);
+        Succ->Preds.push_back(Pred);
+      }
+      Succ->Preds.remove(Block);
+      DEBUG(llvm::dbgs() << "\tDeleting " << Block->getBlockID() << "\n");
+      I = Blocks.erase(I);
+      delete Block;
+    } else {
+      I++;
+    }
+  }
 
   // reduce
   if (TrackedStmts != NULL) {
@@ -485,12 +538,9 @@ void NaturalLoop::build(
             NaturalLoopBlock *NewSucc = Succ != Current ? Succ : Pred;
 
             DEBUG(llvm::dbgs() << "\tRedirecting (" << Pred->getBlockID() << "," << Current->getBlockID() << ") to " << NewSucc->getBlockID() << "\n");
-            /* std::replace(Pred->Succs.begin(), Pred->Succs.end(), Current, Succ); */
-            Pred->Succs.erase(Current);
-            Pred->Succs.insert(NewSucc);
-            /* std::replace(Succ->Preds.begin(), Succ->Preds.end(), Current, Pred); */
+            std::replace(Pred->Succs.begin(), Pred->Succs.end(), Current, Succ);
             DEBUG(llvm::dbgs() << "\tAdding " << Pred->getBlockID() << " to " << NewSucc->getBlockID() << "'s preds\n");
-            NewSucc->Preds.insert(Pred);
+            NewSucc->Preds.push_back(Pred);
           }
         }
         for (NaturalLoopBlock::const_succ_iterator SI = Current->succ_begin(),
@@ -499,7 +549,7 @@ void NaturalLoop::build(
           NaturalLoopBlock *Succ = *SI;
           if (not Succ) continue;
           DEBUG(llvm::dbgs() << "\tRemoving " << Current->getBlockID() << " from " << Succ->getBlockID() << "'s preds\n");
-          Succ->Preds.erase(Current);
+          Succ->Preds.remove(Current);
         }
         DEBUG(llvm::dbgs() << "\tDeleting " << Current->getBlockID() << "\n");
         BI = Blocks.erase(BI);

@@ -470,6 +470,9 @@ class IncrementClassifier : public LoopClassifier {
                                                  PE = Loop->getExit().pred_end();
                                                  PI != PE; PI++) {
         const NaturalLoopBlock *Block = *PI;
+
+        assert(Block->getTerminator() && "pred of EXIT has no terminator stmt");
+
         // TODO dealing with switch/case is more complex (compare labels):
         if (Block->getTerminator()->getStmtClass() == Stmt::SwitchStmtClass) {
           continue;
@@ -559,7 +562,7 @@ class IncrementClassifier : public LoopClassifier {
     }
 
     std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const throw () {
-      /* classifyProve(Loop); */
+      classifyProve(Loop);
 
       // do we have the right # of exit arcs?
       unsigned PredSize = Loop->getExit().pred_size();
