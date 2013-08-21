@@ -119,16 +119,6 @@ class ControlDependenceGraph {
     }
 };
 
-static bool isTransitionBlock(const CFGBlock *Block) {
-  if (Block->size() == 0 &&    // no statements
-      Block->getTerminator() == NULL && Block->getLabel() == NULL &&
-      Block->succ_size() >= 1) // EXIT has 0
-    {
-      return true;
-    }
-  return false;
-}
-
 static const std::set<const CFGBlock*> getExitingTerminatorConditions(const std::set<const CFGBlock*> Blocks) {
   std::set<const CFGBlock*> Result;
   for (auto Block : Blocks) {
@@ -137,14 +127,15 @@ static const std::set<const CFGBlock*> getExitingTerminatorConditions(const std:
                                        I != E; I++) {
       const CFGBlock *Succ = *I;
       if (not Succ) continue;
-      if (isTransitionBlock(Succ)) continue;
-      // edge Block->Succ leaves the loop
+      if (isTransitionBlock(Succ)) {
+        // successor of transition block is EXIT
+        assert(Succ->succ_size() == 1);
+        Succ = *Succ->succ_begin();
+      }
       if (Blocks.count(Succ) == 0) {
-        if (Block->getTerminatorCondition()) {
-          Result.insert(Block);
-        } else {
-          llvm_unreachable("Exiting block has no condition");
-        }
+        /* could be empty, eg `for(;;)' */
+        /* assert(Block->getTerminatorCondition()); */
+        Result.insert(Block);
       }
     }
   }
@@ -193,7 +184,7 @@ static const NaturalLoop *buildNaturalLoop(
   std::set<const CFGBlock*> VisitedBlocks;
   std::set<const Stmt*> TrackedStmts;
   std::set<const VarDecl*> ControlVars(SC.Vars);
-  std::set<const CFGBlock*> TrackedBlocks(SC.Locations);
+  std::set<const CFGBlock*> TrackedBlocks;
   size_t OldSize;
   do {
     OldSize = TrackedStmts.size();
@@ -362,30 +353,6 @@ class FunctionCallback : public MatchFinder::MatchCallback {
       DominatorTree Dom;
       Dom.buildDominatorTree(*AC);
 
-      /* Clang builds "Transition" blocks for loop stmt (c.f. `CFG.cpp').
-       * Continue blocks will also point to this block, instead of the loop
-       * header. Thus only the arc Transition->Header will be recognized as a
-       * back edge, where potentially multiple back edges exist.
-       * As a workaround, for every "empty" block (= transition block), we
-       * introduce edges "jumping" past the transition block.
-       */
-      for (CFG::iterator it = CFG->begin(),
-                         end = CFG->end();
-                         it != end; it++) {
-        CFGBlock *Block = *it;
-        if (isTransitionBlock(Block)) {
-          CFGBlock *Succ = *Block->succ_begin();
-          // we found a transition block
-          for (CFGBlock::pred_iterator PI = Block->pred_begin(),
-                                      PE = Block->pred_end();
-                                      PI != PE; PI++) {
-            CFGBlock *Pred = *PI;
-            Pred->addSuccessor(Succ, CFG->getBumpVectorContext());
-            Pred->setLoopTarget(Block->getLoopTarget());
-          }
-        }
-      }
-
       for (CFG::const_iterator it = CFG->begin(), end = CFG->end(); it != end; it++) {
         const CFGBlock *Tail = *it;
         for (CFGBlock::const_succ_iterator it2 = Tail->succ_begin(); it2 != Tail->succ_end(); it2++) {
@@ -512,7 +479,8 @@ class FunctionCallback : public MatchFinder::MatchCallback {
             const Stmt *S = getGotoLCA(Unsliced->getLoopStmt(), D);
             S->dump();
           }
-          if (ViewSliced || ViewSlicedOuter || ViewUnsliced) {
+          if (ViewSliced || ViewSlicedOuter || ViewUnsliced or
+              DumpSliced || DumpSlicedOuter || DumpUnsliced) {
             llvm::errs() << "Back edges: ";
             for (auto Tail : MLD.Tails) {
               llvm::errs() << Tail->getBlockID();
@@ -527,6 +495,10 @@ class FunctionCallback : public MatchFinder::MatchCallback {
             if (ViewSliced) SlicedAllLoops->view();
             if (ViewSlicedOuter) SlicedOuterLoop->view();
             if (ViewUnsliced) Unsliced->view();
+
+            if (DumpSliced) SlicedAllLoops->dump();
+            if (DumpSlicedOuter) SlicedOuterLoop->dump();
+            if (DumpUnsliced) Unsliced->dump();
           }
         }
 

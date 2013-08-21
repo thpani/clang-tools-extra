@@ -470,6 +470,9 @@ class IncrementClassifier : public LoopClassifier {
                                                  PE = Loop->getExit().pred_end();
                                                  PI != PE; PI++) {
         const NaturalLoopBlock *Block = *PI;
+
+        assert(Block->getTerminator() && "pred of EXIT has no terminator stmt");
+
         // TODO dealing with switch/case is more complex (compare labels):
         if (Block->getTerminator()->getStmtClass() == Stmt::SwitchStmtClass) {
           continue;

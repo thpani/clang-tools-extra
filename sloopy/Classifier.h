@@ -47,10 +47,10 @@ class Classifier {
       long Begin = now();
 
       // ANY + Stmt
-      ALC.classify(SlicedAllLoops);
+      ALC.classify(Unsliced);
 
       // Simple control flow
-      SLC.classify(SlicedAllLoops);
+      SLC.classify(Unsliced);
 
       // Branching
       B.classify(SlicedAllLoops);
@@ -60,10 +60,10 @@ class Classifier {
       CVC.classify(SlicedAllLoops);
       CVC2.classify(SlicedOuterLoop);
 
-      MasterC.classify(SlicedAllLoops, SingleExit);
-      MasterC.classify(SlicedAllLoops, StrongSingleExit);
-      auto IMEAC = MasterC.classify(SlicedAllLoops, MultiExit);
-      MasterC.classify(SlicedAllLoops, StrongMultiExit);
+      MasterC.classify(Unsliced, SingleExit);
+      MasterC.classify(Unsliced, StrongSingleExit);
+      auto IMEAC = MasterC.classify(Unsliced, MultiExit);
+      MasterC.classify(Unsliced, StrongMultiExit);
       if (isSpecified && DumpIncrementVars) {
         for (auto I : IMEAC) {
           llvm::errs() << "(incr: " << I.VD->getNameAsString() << ", ";
@@ -87,18 +87,18 @@ class Classifier {
       // Influence
 
       if (EnableAmortized) {
-        ATA2C.classify(MasterC, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
-        ATAC.classify(MasterC, MultiExit, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
+        ATA2C.classify(MasterC, Unsliced, OutermostNestingLoop, NestingLoops);
+        ATAC.classify(MasterC, MultiExit, Unsliced, OutermostNestingLoop, NestingLoops);
         /* Make sure to pass Unsliced!!!
         * MultiExitNoCond classifier needs the Unsliced CFG to find all increments!
         */
         WeakATAC.classify(MasterC, MultiExitNoCond, Unsliced, OutermostNestingLoop, NestingLoops);
-        ATBC.classify(MasterC, SlicedAllLoops, OutermostNestingLoop, NestingLoops);
+        ATBC.classify(MasterC, Unsliced, OutermostNestingLoop, NestingLoops);
 
         /* Uses hasClass!!!
         * Make sure to run this AFTER WeakAmortizedTypeAClassifier!!!
         */
-        IIOC.classify(ProperlyNestedLoops, SlicedOuterLoop);
+        IIOC.classify(ProperlyNestedLoops, Unsliced);
       }
 
       LoopClassifier::classify(Unsliced, "Time", (int)(now()-Begin));
