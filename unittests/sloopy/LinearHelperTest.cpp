@@ -132,6 +132,7 @@ TEST(LinearHelperTest, testMonotonic) {
   EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    4*x*f(0, noargs) + f(0, noargs) + 2).first);
   EXPECT_EQ(NotMonotone, H.isLinearIn(x,    x + g(x)  ).first);
   EXPECT_EQ(NotMonotone, H.isLinearIn(x,    x * g(x)  ).first);
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x, x-y).first);
 }
 
 TEST(LinearHelperTest, testDropsToZero) {
@@ -140,7 +141,6 @@ TEST(LinearHelperTest, testDropsToZero) {
   expr y = c.int_const("y");
   const sort *domainF  = { };
   const sort domainG[] = { c.int_sort() };
-  const expr *noargs = { };
   func_decl f = c.function("FUNC_f", 0, domainF, c.int_sort());
   func_decl g = c.function("FUNC_g", 1, domainG, c.int_sort());
 

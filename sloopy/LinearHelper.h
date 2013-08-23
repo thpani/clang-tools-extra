@@ -3,6 +3,7 @@
 #include <stdexcept>
 
 #include "llvm/ADT/BitVector.h"
+#include "llvm/Support/Debug.h"
 #include "clang/AST/StmtVisitor.h"
 
 #include "z3++.h"
@@ -23,14 +24,23 @@ namespace sloopy {
 
     typedef __int64 machine_int;
 
+    raw_ostream &operator<<(raw_ostream &S, const z3::expr &E) {
+      S << Z3_ast_to_string(E.ctx(), E);
+      return S;
+    }
+
     class Z3Converter : public ConstStmtVisitor<Z3Converter, z3::expr> {
-      unsigned AddrOfCounter = 0;
       llvm::OwningPtr<z3::context> Ctx;
+      const z3::func_decl AddrOf, Deref;
       const bool NextExpression;
       std::map<const VarDecl*, z3::expr> MapClangZ3;
 
       public:
-      Z3Converter(bool NextExpression=false) : Ctx(new z3::context), NextExpression(NextExpression) {}
+
+      Z3Converter(bool NextExpression=false) : Ctx(new z3::context),
+        AddrOf(Ctx->function("__SLOOPY__AddrOf", Ctx->int_sort(), Ctx->int_sort())),
+        Deref(Ctx->function("__SLOOPY__Deref", Ctx->int_sort(), Ctx->int_sort())),
+        NextExpression(NextExpression) {}
 
       std::set<const VarDecl*> getConstants() {
         std::set<const VarDecl*> Result;
@@ -45,7 +55,6 @@ namespace sloopy {
       }
 
       z3::expr Run(const Expr* S) {
-        AddrOfCounter = 0;
         MapClangZ3.clear();
         return Visit(S);
       }
@@ -94,12 +103,9 @@ namespace sloopy {
           case UO_Minus:
             return -Visit(Sub);
           case UO_AddrOf:
-            {
-              std::stringstream ss;
-              ss << "AddrOf" << AddrOfCounter++;
-              z3::expr result = Ctx->int_const(ss.str().c_str());
-              return result;
-            }
+            return AddrOf(Visit(Sub));
+          case UO_Deref:
+            return Deref(Visit(Sub));
           case UO_LNot:
             {
               z3::expr sube = Visit(Sub);
@@ -115,7 +121,6 @@ namespace sloopy {
           default:
             throw exception("unhandled stmt");
 
-            /* UO_Deref */ 	
             /* UO_Not */ 	
             /* UO_LNot */ 	
             /* UO_Real */ 	
@@ -243,6 +248,7 @@ namespace sloopy {
       bool AssumeMNeq0 = false;
       bool AssumeLeBoundLtMaxVal = false;
       bool AssumeGeBoundGtMinVal = false;
+      const unsigned PtrSize = 4;
 
       bool containsX(const z3::expr &X, const z3::expr &E) {
         if (E.is_const())
@@ -257,37 +263,43 @@ namespace sloopy {
         return false;
       }
 
-      enum MultResult { NotMult, Numeral, Expression };
       z3::expr simplify(z3::expr E) {
         z3::params p(E.ctx());
         p.set(":som", true);
         E = E.simplify(p);
+        DEBUG_WITH_TYPE("z3", llvm::dbgs() << "simplifying " << E << "\n");
 
         // workaround http://stackoverflow.com/questions/18233389/why-is-with-numeral-argument-not-flattened-by-simplify
-        if (E.decl().decl_kind() == Z3_OP_MUL and E.num_args() == 2 and E.arg(1).decl().decl_kind() == Z3_OP_MUL) {
-          std::vector<Z3_ast> v;
-          v.push_back(E.arg(0));
-          for (unsigned i=0; i<E.arg(1).num_args(); i++) {
-            v.push_back(E.arg(1).arg(i));
+        if (E.decl().decl_kind() == Z3_OP_MUL and E.num_args() == 2) {
+          if (E.arg(1).decl().decl_kind() == Z3_OP_MUL) {
+            std::vector<Z3_ast> v;
+            v.push_back(E.arg(0));
+            for (unsigned i=0; i<E.arg(1).num_args(); i++) {
+              v.push_back(E.arg(1).arg(i));
+            }
+            const Z3_ast *args = &v[0];
+            Z3_ast r = Z3_mk_mul(E.ctx(), E.arg(1).num_args()+1, args);
+            E.check_error();
+            E = z3::expr(E.ctx(), r);
           }
-          const Z3_ast *args = &v[0];
-          Z3_ast r = Z3_mk_mul(E.ctx(), E.arg(1).num_args()+1, args);
-          E.check_error();
-          return z3::expr(E.ctx(), r);
         }
 
+        DEBUG_WITH_TYPE("z3", llvm::dbgs() << "\tto " << Z3_ast_to_string(E.ctx(), E) << "\n");
         return E;
       }
-      MultResult mult_in(const z3::expr &X, const z3::expr &E, machine_int &m) {
+
+      // m*x, if m is numeral Numeral, if m is Expression Expression
+      enum MultResult { NotMult, Numeral, Expression };
+      MultResult mult_in(const z3::expr &X, const z3::expr &E, machine_int &mRef) {
         if (E.decl().decl_kind() != Z3_OP_MUL)
           return MultResult::NotMult;
 
         const z3::expr S = simplify(E);
-        /* std::cerr << S << "\n"; */
 
         bool foundX = false;
         bool foundNum = false;
         bool foundExpr = false;
+        machine_int m;
         for (unsigned i = 0; i < S.num_args(); i++) {
           z3::expr C = S.arg(i);
 
@@ -298,19 +310,26 @@ namespace sloopy {
             assert(not foundNum); // should be folded by simplify
             m = as_int(C);
             foundNum = true;
-          //} else if (not eq(X, C) and C.is_const()) {
-            //return MultResult::Expression;
           } else if (not containsX(X, C)) {
             foundExpr = true;
+          } else if (C.decl().name().str() == "__SLOOPY__AddrOf" and eq(C.arg(0), X)) {
+            assert(!foundX);
+            m = PtrSize;
+            foundX = true;
+          } else if (C.decl().name().str() == "__SLOOPY__Deref" and eq(C.arg(0), X)) {
+            // TODO AssumeDerefNeq0
           } else {
             // contains X
             return MultResult::NotMult;
           }
         }
 
-        if (!foundX) return MultResult::Expression;
+        if (!foundX) return NotMult;  // constant
         if (foundExpr) return MultResult::Expression;
-        if (foundNum) return MultResult::Numeral;
+        if (foundNum) {
+          mRef = m;
+          return MultResult::Numeral;
+        }
         llvm_unreachable("");
       }
 
@@ -349,6 +368,12 @@ namespace sloopy {
             }
           } else if (not containsX(X, C)) {
             /* blank */
+          } else if (C.decl().name().str() == "__SLOOPY__AddrOf" and eq(C.arg(0), X)) {
+            assert(!setM);
+            m = PtrSize;
+            setM = true;
+          } else if (C.decl().name().str() == "__SLOOPY__Deref" and eq(C.arg(0), X)) {
+            // TODO AssumeDerefTakesRightValue
           } else {
             return { NotMonotone, 0 };
           }
@@ -505,7 +530,7 @@ namespace sloopy {
         Z3Converter Z3C;
         try {
           z3::expr z3E = Z3C.Run(E);
-          if (DumpZ3) std::cerr << z3E << "\n";
+          DEBUG_WITH_TYPE("z3", llvm::dbgs() << "is linear in? " << z3E << "\n");
           try {
             z3::expr z3X = Z3C.exprFor(X);
             Constants = Z3C.getConstants();
@@ -528,7 +553,7 @@ namespace sloopy {
             }
             z3E = !z3E;
           }
-          if (DumpZ3) std::cerr << z3E << "\n";
+          DEBUG_WITH_TYPE("z3", llvm::dbgs() << "drops to zero? " << z3E << "\n");
           try {
             z3::expr z3X = Z3C.exprFor(X);
             Constants = Z3C.getConstants();
