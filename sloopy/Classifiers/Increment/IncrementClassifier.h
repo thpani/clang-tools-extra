@@ -463,7 +463,7 @@ class IncrementClassifier : public LoopClassifier {
         LoopVarCandidatesEachPath.insert(I);
       }
 
-      llvm::BitVector Assumption(3);
+      llvm::BitVector Assumption(5);
       std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks;
       // find provably terminating blocks
       for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
@@ -556,6 +556,8 @@ class IncrementClassifier : public LoopClassifier {
         LoopClassifier::classify(Loop, "ProvedWithAssumptionWrapv", Assumption[0]);
         LoopClassifier::classify(Loop, "ProvedWithAssumptionLeBoundNotMax", Assumption[1]);
         LoopClassifier::classify(Loop, "ProvedWithAssumptionGeBoundNotMin", Assumption[2]);
+        LoopClassifier::classify(Loop, "ProvedWithAssumptionMNeq0", Assumption[3]);
+        LoopClassifier::classify(Loop, "ProvedWithAssumptionWrapvOrRunsInto", Assumption[4]);
       }
 #undef DEBUG_TYPE
 #define DEBUG_TYPE ""

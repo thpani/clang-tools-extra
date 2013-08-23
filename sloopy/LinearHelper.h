@@ -232,14 +232,15 @@ namespace sloopy {
       UnknownDirection,   // monotone, but unknown whether increasing or decreasing (m*x)
       Constant,           // constant
       StrictIncreasing,   // strictly increasing
-      StrictDecreasing    // strictly decreasing
+      StrictDecreasing,   // strictly decreasing
     };
 
     // m*x + b
     class LinearHelper {
       std::set<const VarDecl*> Constants;
-      std::set<const z3::expr*> Z3AssumeWrapv;
-      std::set<const VarDecl*> AssumeWrapv;
+      std::set<const z3::expr*> Z3AssumeWrapv, Z3AssumeWrapvOrRunsInto;
+      std::set<const VarDecl*> AssumeWrapv, AssumeWrapvOrRunsInto;
+      bool AssumeMNeq0 = false;
       bool AssumeLeBoundLtMaxVal = false;
       bool AssumeGeBoundGtMinVal = false;
 
@@ -313,22 +314,15 @@ namespace sloopy {
         llvm_unreachable("");
       }
 
-      Monotonicity mToDirection(machine_int m) {
-        if (m > 0) return StrictIncreasing;
-        else if (m < 0) return StrictDecreasing;
-        else if (m == 0) return Constant;
-        else llvm_unreachable("false");
-      }
-
       public:
-      Monotonicity isLinearIn(const z3::expr &X, const z3::expr &E) {
+      std::pair<Monotonicity,machine_int> isLinearIn(const z3::expr &X, const z3::expr &E) {
         z3::expr S = simplify(E);
 
         if (S.decl().decl_kind() != Z3_OP_ADD) {
           try {
             S = S + 0;
           } catch (z3::exception) {
-            return NotMonotone;
+            return { NotMonotone, 0 };
           }
         }
 
@@ -356,50 +350,69 @@ namespace sloopy {
           } else if (not containsX(X, C)) {
             /* blank */
           } else {
-            return NotMonotone;
+            return { NotMonotone, 0 };
           }
         }
         
-        if (setM) {
-          return mToDirection(m);
-        }
         if (foundExpr) {
-          return UnknownDirection;
+          return { UnknownDirection, 0 };
         }
-        assert(m == 0);
-        return Constant;
+
+        assert(setM or m == 0);
+
+        if (m > 0) return { StrictIncreasing, m };
+        else if (m < 0) return { StrictDecreasing, m };
+        else if (m == 0) return { Constant, m };
+        else llvm_unreachable("false");
       }
 
       /* Check if X is linear in A, not in B, and will run into B given dir. */
       bool dropsToZero(const z3::expr &X, const int dir, const Z3_decl_kind DeclKind, const z3::expr &A, const z3::expr &B) {
-        Monotonicity Mon;
-        Mon = isLinearIn(X, A);
-        if ((Mon == StrictIncreasing or
-             Mon == StrictDecreasing or
-             Mon == UnknownDirection
-             ) and not containsX(X, B)) {
-          switch (DeclKind) {
-            case Z3_OP_LE:
-              AssumeLeBoundLtMaxVal = true;
-            case Z3_OP_LT:
-              if (Mon == UnknownDirection or
-                 (Mon == StrictIncreasing and dir < 0) or
-                 (Mon == StrictDecreasing and dir > 0))
-                Z3AssumeWrapv.insert(&X);
-              break;
-            case Z3_OP_GE:
-              AssumeGeBoundGtMinVal = true;
-            case Z3_OP_GT:
-              if (Mon == UnknownDirection or
-                 (Mon == StrictIncreasing and dir > 0) or
-                 (Mon == StrictDecreasing and dir < 0))
-                Z3AssumeWrapv.insert(&X);
-              break;
-            default:
-              llvm_unreachable("unhandled decl_kind");
+        auto Pair = isLinearIn(X, A);
+        Monotonicity Mon = Pair.first;
+        machine_int m = Pair.second;
+
+        if (containsX(X,B)) return false;
+
+        if (Z3_OP_DISTINCT == DeclKind and (dir == 1 or dir == -1)) {
+          if ((Mon == StrictIncreasing and m == 1) or
+              (Mon == StrictDecreasing and m == -1)) {
+            Z3AssumeWrapvOrRunsInto.insert(&X);
+            return true;
           }
-          return true;
         }
+
+        if (Z3_OP_LE <= DeclKind and DeclKind <= Z3_OP_GT) {
+          if (Mon == StrictIncreasing or
+              Mon == StrictDecreasing or
+              Mon == UnknownDirection) {
+            if (Mon == UnknownDirection) {
+              AssumeMNeq0 = true;
+            }
+            switch (DeclKind) {
+              case Z3_OP_LE:
+                AssumeLeBoundLtMaxVal = true;
+              case Z3_OP_LT:
+                if (Mon == UnknownDirection or
+                  (Mon == StrictIncreasing and dir < 0) or
+                  (Mon == StrictDecreasing and dir > 0))
+                  Z3AssumeWrapv.insert(&X);
+                break;
+              case Z3_OP_GE:
+                AssumeGeBoundGtMinVal = true;
+              case Z3_OP_GT:
+                if (Mon == UnknownDirection or
+                  (Mon == StrictIncreasing and dir > 0) or
+                  (Mon == StrictDecreasing and dir < 0))
+                  Z3AssumeWrapv.insert(&X);
+                break;
+              default:
+                llvm_unreachable("unhandled decl_kind");
+            }
+            return true;
+          }
+        }
+
         return false;
       }
 
@@ -408,18 +421,18 @@ namespace sloopy {
 
         z3::expr S = E;
 
-        Monotonicity Mon = isLinearIn(X, E);
-        if (Mon == StrictIncreasing or Mon == StrictDecreasing) {
-          Z3AssumeWrapv.insert(&X);
-          return true;
-        }
-
+        // propagate negation invards
         if (S.decl().decl_kind() == Z3_OP_NOT) {
           Z3_decl_kind ChildDeclKind = S.arg(0).decl().decl_kind();
           if ((Z3_OP_LE <= ChildDeclKind and ChildDeclKind <= Z3_OP_GT) or
-               ChildDeclKind == Z3_OP_NOT) {
+              (Z3_OP_EQ <= ChildDeclKind and ChildDeclKind <= Z3_OP_DISTINCT) or
+              ChildDeclKind == Z3_OP_NOT) {
             Z3_ast (*mk_func) (Z3_context, Z3_ast, Z3_ast);
             switch (ChildDeclKind) {
+              case Z3_OP_EQ:
+                return dropsToZero(X, S.arg(0).arg(0) != S.arg(0).arg(1), dir);
+              case Z3_OP_DISTINCT:
+                return dropsToZero(X, S.arg(0).arg(0) == S.arg(0).arg(1), dir);
               case Z3_OP_LE:
                 mk_func = Z3_mk_gt;
                 break;
@@ -437,14 +450,25 @@ namespace sloopy {
               default:
                 llvm_unreachable("unhandled decl kind");
             }
-            Z3_ast r = mk_func(E.ctx(), S.arg(0).arg(0), S.arg(0).arg(1));
-            return dropsToZero(X, z3::expr(E.ctx(), r), dir);
+            Z3_ast r = mk_func(S.ctx(), S.arg(0).arg(0), S.arg(0).arg(1));
+            return dropsToZero(X, z3::expr(S.ctx(), r), dir);
           }
+        }
+
+        /* linear expression */
+        auto Pair = isLinearIn(X, S);
+        Monotonicity Mon = Pair.first;
+        if (Mon == StrictIncreasing or Mon == StrictDecreasing) {
+          Z3AssumeWrapv.insert(&X);
+          return true;
         }
 
         Z3_decl_kind DeclKind = S.decl().decl_kind();
 
-        if (not (Z3_OP_LE <= DeclKind and DeclKind <= Z3_OP_GT)) {
+        /* inequality */
+
+        if (not((Z3_OP_LE <= DeclKind and DeclKind <= Z3_OP_GT) or
+                (Z3_OP_EQ <= DeclKind and DeclKind <= Z3_OP_DISTINCT))) {
             return false;
         }
 
@@ -465,6 +489,9 @@ namespace sloopy {
           case Z3_OP_GT:
             DeclKind = Z3_OP_LT;
             break;
+          case Z3_OP_EQ:
+          case Z3_OP_DISTINCT:
+            break;
           default:
             llvm_unreachable("unhandled decl kind");
         }
@@ -482,11 +509,7 @@ namespace sloopy {
           try {
             z3::expr z3X = Z3C.exprFor(X);
             Constants = Z3C.getConstants();
-            Monotonicity Result = isLinearIn(z3X, z3E);
-            for (auto expr : Z3AssumeWrapv) {
-              AssumeWrapv.insert(Z3C.exprFor(*expr));
-            }
-            return Result;
+            return isLinearIn(z3X, z3E).first;
           } catch (std::out_of_range) {
             return Constant;
           }
@@ -513,6 +536,9 @@ namespace sloopy {
             for (auto expr : Z3AssumeWrapv) {
               AssumeWrapv.insert(Z3C.exprFor(*expr));
             }
+            for (auto expr : Z3AssumeWrapvOrRunsInto) {
+              AssumeWrapvOrRunsInto.insert(Z3C.exprFor(*expr));
+            }
             return Result;
           } catch (std::out_of_range) {
             return false;
@@ -524,12 +550,14 @@ namespace sloopy {
 
       std::set<const VarDecl*> getConstants() { return Constants; }
 
-      /* 0 -> wrapv
-       * 1 -> <= N, N < max
-       * 2 -> >= N, N > min
+      /* 0 wrapv
+       * 1 <= N, N < max
+       * 2 >= N, N > min
+       * 3 m*i+b, m != 0
+       * 4 wrapv or runs in the right direction (equality)
        */
       llvm::BitVector getAssumptions() {
-        llvm::BitVector Assumption(3);
+        llvm::BitVector Assumption(5);
         for (auto VD : AssumeWrapv) {
           if (not VD->getType().getTypePtr()->isUnsignedIntegerOrEnumerationType()) {
             Assumption.set(0);
@@ -538,6 +566,13 @@ namespace sloopy {
         }
         Assumption[1] = AssumeLeBoundLtMaxVal;
         Assumption[2] = AssumeGeBoundGtMinVal;
+        Assumption[3] = AssumeMNeq0;
+        for (auto VD : AssumeWrapvOrRunsInto) {
+          if (not VD->getType().getTypePtr()->isUnsignedIntegerOrEnumerationType()) {
+            Assumption.set(4);
+            break;
+          }
+        }
         return Assumption;
       }
     };

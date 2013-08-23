@@ -97,29 +97,41 @@ TEST(LinearHelperTest, testMonotonic) {
   func_decl g = c.function("FUNC_g", 1, domainG, c.int_sort());
 
   LinearHelper H;
-  EXPECT_EQ(Constant,   H.isLinearIn(x,   0*x     +1));
-  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,     x       ));
-  EXPECT_EQ(StrictDecreasing, H.isLinearIn(x,    -x       ));
-  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,   1*x     +1));
-  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,   3*x     +1));
-  EXPECT_EQ(StrictDecreasing, H.isLinearIn(x, -42*x     +1));
-  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,     x     +1));
-  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,     x     -4));
-  EXPECT_EQ(StrictDecreasing, H.isLinearIn(x,     x-4  * (x+2) ));
-  EXPECT_EQ(NotMonotone,  H.isLinearIn(x,    x*x           ));
-  EXPECT_EQ(NotMonotone,  H.isLinearIn(x,    (x-4) * (x+2) ));
-  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,    x + y         ));
-  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,    x + y + z     ));
-  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    x * y         ));
-  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,    x + f(0, noargs) ));
-  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    x * f(0, noargs) ));
-  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,    x + g(y)  ));
-  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    x * g(y)  ));
-  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    4*x*y));
-  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    4*x*f(0, noargs)));
-  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    4*x*f(0, noargs) + f(0, noargs) + 2));
-  EXPECT_EQ(NotMonotone, H.isLinearIn(x,    x + g(x)  ));
-  EXPECT_EQ(NotMonotone, H.isLinearIn(x,    x * g(x)  ));
+  EXPECT_EQ(Constant,   H.isLinearIn(x,   0*x     +1).first);
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,     x       ).first);
+  EXPECT_EQ(1, H.isLinearIn(x,     x       ).second);
+  EXPECT_EQ(StrictDecreasing, H.isLinearIn(x,    -x       ).first);
+  EXPECT_EQ(-1, H.isLinearIn(x,    -x       ).second);
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,   1*x     +1).first);
+  EXPECT_EQ(1, H.isLinearIn(x,   1*x     +1).second);
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,   3*x     +1).first);
+  EXPECT_EQ(3, H.isLinearIn(x,   3*x     +1).second);
+  EXPECT_EQ(StrictDecreasing, H.isLinearIn(x, -42*x     +1).first);
+  EXPECT_EQ(-42, H.isLinearIn(x, -42*x     +1).second);
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,     x     +1).first);
+  EXPECT_EQ(1, H.isLinearIn(x,     x     +1).second);
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,     x     -4).first);
+  EXPECT_EQ(1, H.isLinearIn(x,     x     -4).second);
+  EXPECT_EQ(StrictDecreasing, H.isLinearIn(x,     x-4  * (x+2) ).first);
+  EXPECT_EQ(-3, H.isLinearIn(x,     x-4  * (x+2) ).second);
+  EXPECT_EQ(NotMonotone,  H.isLinearIn(x,    x*x           ).first);
+  EXPECT_EQ(NotMonotone,  H.isLinearIn(x,    (x-4) * (x+2) ).first);
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,    x + y         ).first);
+  EXPECT_EQ(1, H.isLinearIn(x,    x + y         ).second);
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,    x + y + z     ).first);
+  EXPECT_EQ(1, H.isLinearIn(x,    x + y + z     ).second);
+  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    x * y         ).first);
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,    x + f(0, noargs) ).first);
+  EXPECT_EQ(1, H.isLinearIn(x,    x + f(0, noargs) ).second);
+  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    x * f(0, noargs) ).first);
+  EXPECT_EQ(StrictIncreasing, H.isLinearIn(x,    x + g(y)  ).first);
+  EXPECT_EQ(1, H.isLinearIn(x,    x + g(y)  ).second);
+  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    x * g(y)  ).first);
+  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    4*x*y).first);
+  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    4*x*f(0, noargs)).first);
+  EXPECT_EQ(UnknownDirection, H.isLinearIn(x,    4*x*f(0, noargs) + f(0, noargs) + 2).first);
+  EXPECT_EQ(NotMonotone, H.isLinearIn(x,    x + g(x)  ).first);
+  EXPECT_EQ(NotMonotone, H.isLinearIn(x,    x * g(x)  ).first);
 }
 
 TEST(LinearHelperTest, testDropsToZero) {
@@ -195,5 +207,5 @@ TEST(LinearHelperTest, testLinearHelperWithConverter) {
 
   res = z3Expr("void a() { int i,j; if ((3*i) + (6%4)) {} }", e);
   EXPECT_TRUE(res);
-  EXPECT_TRUE(H.isLinearIn(e.arg(0).arg(1), e));
+  EXPECT_TRUE(H.isLinearIn(e.arg(0).arg(1), e).first);
 }
