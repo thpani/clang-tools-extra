@@ -29,22 +29,29 @@ static boost::variant<std::string, IncrementInfo> getIncrementInfo(const Stmt *S
             if (RHS->isAdditiveOp()) {
               const VarDecl *RRHS = getVariable(RHS->getRHS());
               const VarDecl *RLHS = getVariable(RHS->getLHS());
-              if (RRHS == VD && isIntegerConstant(RHS->getLHS(), Context)) {
-                IncrementInfo Result = { VD, BOP, VarDeclIntPair(getIntegerConstant(RHS->getLHS(), Context)) };
-                return Result;
-              }
               if (RLHS == VD && isIntegerConstant(RHS->getRHS(), Context)) {
-                IncrementInfo Result = { VD, BOP, VarDeclIntPair(getIntegerConstant(RHS->getRHS(), Context)) };
+                auto i = getIntegerConstant(RHS->getRHS(), Context);
+                if (RHS->getOpcode() == BO_Sub) i = -i;
+                IncrementInfo Result = { VD, BOP, VarDeclIntPair(i) };
                 return Result;
               }
               const VarDecl *Increment;
-              if (RRHS == VD && (Increment = getIntegerVariable(RHS->getLHS()))) {
-                IncrementInfo Result = { VD, BOP, Increment };
-                return Result;
-              }
               if (RLHS == VD && (Increment = getIntegerVariable(RHS->getRHS()))) {
                 IncrementInfo Result = { VD, BOP, Increment };
                 return Result;
+              }
+              if (RHS->getOpcode() == BO_Add) {
+                // i = N - i is not increment
+                if (RRHS == VD && (Increment = getIntegerVariable(RHS->getLHS()))) {
+                  IncrementInfo Result = { VD, BOP, Increment };
+                  return Result;
+                }
+                if (RRHS == VD && isIntegerConstant(RHS->getLHS(), Context)) {
+                  auto i = getIntegerConstant(RHS->getLHS(), Context);
+                  if (RHS->getOpcode() == BO_Sub) i = -i;
+                  IncrementInfo Result = { VD, BOP, VarDeclIntPair(i) };
+                  return Result;
+                }
               }
             }
           }
@@ -57,7 +64,9 @@ static boost::variant<std::string, IncrementInfo> getIncrementInfo(const Stmt *S
       if (const VarDecl *VD = getVariable(BOP->getLHS())) {
         if (TypePredicate(VD)) {
           if (isIntegerConstant(BOP->getRHS(), Context)) {
-            IncrementInfo Result = { VD, BOP, VarDeclIntPair(getIntegerConstant(BOP->getRHS(), Context)) };
+            auto i = getIntegerConstant(BOP->getRHS(), Context);
+            if (BOP->getOpcode() == BO_SubAssign) i = -i;
+            IncrementInfo Result = { VD, BOP, VarDeclIntPair(i) };
             return Result;
           }
           else if (const VarDecl *Delta = getIntegerVariable(BOP->getRHS())) {
