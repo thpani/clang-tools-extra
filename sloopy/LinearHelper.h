@@ -574,23 +574,26 @@ namespace sloopy {
               case Z3_OP_LE:
                 AssumeLeBoundLtMaxVal = true;
               case Z3_OP_LT:
-                if (Mon == UnknownDirection or
-                  (Mon == StrictIncreasing and allLtZero(Increments)) or
-                  (Mon == StrictDecreasing and allGtZero(Increments)))
+                if ((Mon == StrictIncreasing and allGtZero(Increments)) or
+                    (Mon == StrictDecreasing and allLtZero(Increments))) {
+                  return true;
+                } else {
                   Z3AssumeWrapv.insert(&X);
-                break;
+                  return true;
+                }
               case Z3_OP_GE:
                 AssumeGeBoundGtMinVal = true;
               case Z3_OP_GT:
-                if (Mon == UnknownDirection or
-                  (Mon == StrictIncreasing and allGtZero(Increments)) or
-                  (Mon == StrictDecreasing and allLtZero(Increments)))
+                if ((Mon == StrictIncreasing and allLtZero(Increments)) or
+                    (Mon == StrictDecreasing and allGtZero(Increments))) {
+                  return true;
+                } else {
                   Z3AssumeWrapv.insert(&X);
-                break;
+                  return true;
+                }
               default:
                 llvm_unreachable("unhandled decl_kind");
             }
-            return true;
           }
         }
 
