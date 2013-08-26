@@ -224,7 +224,12 @@ class IncrementClassifier : public LoopClassifier {
          * This way we don't need to compute f_HEADER(x) on the first iteration.
          */
         Out[Block] = { IncrementCount[Block], IncrementCount[Block], { AccumulatedIncrement[Block] } };
-        DEBUG( llvm::dbgs() << "init [" << Block->getBlockID() << "]: " << IncrementCount[Block] << "\n" );
+        DEBUG(
+          llvm::dbgs() << "init Out[" << Block->getBlockID() << "]: ";
+          for (auto X : Out[Block].AccumulatedIncrement)
+            llvm::dbgs() << X.str() << ",";
+          llvm::dbgs() << "\n";
+        );
         if (IncrementCount[Block] or AccumulatedIncrement[Block].isUnknown() or AccumulatedIncrement[Block] != 0) {
           for (NaturalLoopBlock::const_succ_iterator I = Block->succ_begin(),
                                                      E = Block->succ_end();
@@ -254,11 +259,24 @@ class IncrementClassifier : public LoopClassifier {
           const NaturalLoopBlock *Pred = *P;
           if (Pred == &L->getEntry()) continue;
           DEBUG( llvm::dbgs() << "propagation from WL item's pred " << Pred->getBlockID() << "\n" );
+          DEBUG(
+            llvm::dbgs() << "\tOut[" << Block->getBlockID() << "]: ";
+            for (auto X : Out[Block].AccumulatedIncrement)
+              llvm::dbgs() << X.str() << ",";
+            llvm::dbgs() << "\n";
+          );
           max = Out[Pred].MaxAssignments > max ? Out[Pred].MaxAssignments : max;
           min = Out[Pred].MinAssignments < min ? Out[Pred].MinAssignments : min;
           allIncs.insert(Out[Pred].AccumulatedIncrement.begin(), Out[Pred].AccumulatedIncrement.end());
         }
         In[Block] = { max, min, allIncs };
+
+        DEBUG(
+          llvm::dbgs() << "In[" << Block->getBlockID() << "]: ";
+          for (auto X : In[Block].AccumulatedIncrement)
+            llvm::dbgs() << X.str() << ",";
+          llvm::dbgs() << "\n";
+        );
 
         if (Block == Header) continue;
 
@@ -301,10 +319,7 @@ class IncrementClassifier : public LoopClassifier {
         Out[Block] = NewOut;
 
         DEBUG(
-          llvm::dbgs() << Block->getBlockID() << "\nIn: ";
-          for (auto X : In[Block].AccumulatedIncrement)
-            llvm::dbgs() << X.str() << ",";
-          llvm::dbgs() << "\nOut: ";
+          llvm::dbgs() << "Out[" << Block->getBlockID() << "]: ";
           for (auto X : Out[Block].AccumulatedIncrement)
             llvm::dbgs() << X.str() << ",";
           llvm::dbgs() << "\n";
