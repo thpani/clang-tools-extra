@@ -146,26 +146,35 @@ TEST(LinearHelperTest, testDropsToZero) {
 
   {
   LinearHelper H;
-  EXPECT_TRUE(H.dropsToZero(x, x < y , 1));
+  EXPECT_TRUE(H.dropsToZero(x, x < y , {1}));
   EXPECT_TRUE(H.getAssumptions().none());
   }
   {
   LinearHelper H;
-  EXPECT_TRUE(H.dropsToZero(x, x <= y, 1));
+  EXPECT_TRUE(H.dropsToZero(x, x < y , {2,3,4}));
+  EXPECT_TRUE(H.getAssumptions().none());
+  }
+  {
+  LinearHelper H;
+  EXPECT_FALSE(H.dropsToZero(x, x < y , {2,3,-1}));
+  }
+  {
+  LinearHelper H;
+  EXPECT_TRUE(H.dropsToZero(x, x <= y, {1}));
   /* EXPECT_FALSE(H.getAssumptions()[0]); */
   EXPECT_TRUE(H.getAssumptions()[1]);
   EXPECT_FALSE(H.getAssumptions()[2]);
   }
   {
   LinearHelper H;
-  EXPECT_TRUE(H.dropsToZero(x, x > y , 1));
+  EXPECT_TRUE(H.dropsToZero(x, x > y , {1}));
   /* EXPECT_TRUE(H.getAssumptions()[0]); */
   EXPECT_FALSE(H.getAssumptions()[1]);
   EXPECT_FALSE(H.getAssumptions()[2]);
   }
   {
   LinearHelper H;
-  EXPECT_TRUE(H.dropsToZero(x, x >= y, 1));
+  EXPECT_TRUE(H.dropsToZero(x, x >= y, {1}));
   /* EXPECT_TRUE(H.getAssumptions()[0]); */
   EXPECT_FALSE(H.getAssumptions()[1]);
   EXPECT_TRUE(H.getAssumptions()[2]);
@@ -173,26 +182,26 @@ TEST(LinearHelperTest, testDropsToZero) {
 
   {
   LinearHelper H;
-  EXPECT_TRUE(H.dropsToZero(x, x < y , -1));
+  EXPECT_TRUE(H.dropsToZero(x, x < y , {-1}));
   /* EXPECT_TRUE(H.getAssumptions()[0]); */
   EXPECT_FALSE(H.getAssumptions()[1]);
   EXPECT_FALSE(H.getAssumptions()[2]);
   }
   {
   LinearHelper H;
-  EXPECT_TRUE(H.dropsToZero(x, x <= y, -1));
+  EXPECT_TRUE(H.dropsToZero(x, x <= y, {-1}));
   /* EXPECT_TRUE(H.getAssumptions()[0]); */
   EXPECT_TRUE(H.getAssumptions()[1]);
   EXPECT_FALSE(H.getAssumptions()[2]);
   }
   {
   LinearHelper H;
-  EXPECT_TRUE(H.dropsToZero(x, x > y , -1));
+  EXPECT_TRUE(H.dropsToZero(x, x > y , {-1}));
   EXPECT_TRUE(H.getAssumptions().none());
   }
   {
   LinearHelper H;
-  EXPECT_TRUE(H.dropsToZero(x, x >= y, -1));
+  EXPECT_TRUE(H.dropsToZero(x, x >= y, {-1}));
   /* EXPECT_FALSE(H.getAssumptions()[0]); */
   EXPECT_FALSE(H.getAssumptions()[1]);
   EXPECT_TRUE(H.getAssumptions()[2]);

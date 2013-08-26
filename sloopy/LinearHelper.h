@@ -13,7 +13,126 @@
 using namespace clang;
 
 namespace sloopy {
+
+  struct AugComp;
+
+  class AugInt {
+    friend struct AugComp;
+
+    typedef int longest_int;
+    bool Unknown = false;
+    longest_int Value = 0;
+
+    public:
+    AugInt() {}
+    AugInt(int i) : Value(i) {}
+    static AugInt UnknownAugInt () {
+      AugInt A;
+      A.Unknown = true;
+      return A;
+    }
+
+    bool isUnknown() const {
+      return Unknown;
+    }
+    void setUnknown() {
+      Unknown = true;
+    }
+    longest_int getVal() const {
+      assert(not Unknown);
+      return Value;
+    }
+
+    std::string str() const {
+      if (Unknown) return "Unknown";
+      else {
+        std::stringstream ss;
+        ss << Value;
+        return ss.str();
+      }
+    }
+
+    AugInt operator+(const AugInt &Other) const {
+      if (Unknown or Other.Unknown) return UnknownAugInt();
+      if ((Value > 0 and Other.Value > 0 and Value > (std::numeric_limits<longest_int>::max() - Other.Value)) or 
+          (Value < 0 and Other.Value < 0 and Value < (std::numeric_limits<longest_int>::min() - Other.Value))) {
+        llvm_unreachable("overflow");
+        return UnknownAugInt();
+      }
+      return AugInt(Value + Other.Value);
+    }
+    void operator+=(const int i) {
+      if (Unknown) return;
+
+      AugInt Result = *this + AugInt(i);
+
+      Unknown = Result.Unknown;
+      Value   = Result.Value;
+    }
+    bool operator<(const AugInt &Other) const {
+      assert (not Unknown and not Other.Unknown);
+      return Value < Other.Value;
+    }
+    bool operator>(const AugInt &Other) const {
+      assert (not Unknown and not Other.Unknown);
+      return Value > Other.Value;
+    }
+    // Unknown == Unknown - othw fixed point iterations dont terminate
+    bool operator==(const AugInt &Other) const {
+      /* if (Unknown or Other.Unknown) return false; */
+      return Unknown == Other.Unknown and Value == Other.Value;
+    }
+    bool operator!=(const AugInt &Other) const {
+      /* if (Unknown or Other.Unknown) return false; */
+      return not ((*this) == Other);
+    }
+  };
+
+  struct AugComp {
+    bool operator() (const AugInt& lhs, const AugInt& rhs) const {
+      return lhs.Unknown < rhs.Unknown or
+            (lhs.Unknown == rhs.Unknown and lhs.Value < rhs.Value);
+    }
+  };
+
+  typedef std::set<AugInt, AugComp> IncrementSet;
+
   namespace z3helper {
+
+    typedef __int64 machine_int;
+
+    bool anyUnknown(const IncrementSet &Increments) {
+      for (auto I : Increments) {
+        if (I.isUnknown()) return true;
+      }
+      return false;
+    }
+
+    bool anyZero(const IncrementSet &Increments) {
+      return Increments.count(0);
+    }
+
+    bool singletonOne(const IncrementSet &Increments) {
+      if (Increments.size() != 1) return false;
+      AugInt i = *Increments.begin();
+      return i == 1 or i == -1;
+    }
+
+    bool allLtZero(const IncrementSet &Increments) {
+      if (anyUnknown(Increments)) return false;
+      for (auto I : Increments) {
+        if (not (I < 0)) return false;
+      }
+      return true;
+    }
+
+    bool allGtZero(const IncrementSet &Increments) {
+      if (anyUnknown(Increments)) return false;
+      for (auto I : Increments) {
+        if (not (I > 0)) return false;
+      }
+      return true;
+    }
 
     class exception {
       const std::string m_msg;
@@ -22,11 +141,15 @@ namespace sloopy {
       std::string msg() const { return m_msg.c_str(); }
     };
 
-    typedef __int64 machine_int;
-
     raw_ostream &operator<<(raw_ostream &S, const z3::expr &E) {
       S << Z3_ast_to_string(E.ctx(), E);
       return S;
+    }
+
+    machine_int as_int(const z3::expr &E) {
+      machine_int ret;
+      assert(Z3_TRUE == Z3_get_numeral_int64(E.ctx(), E, &ret));
+      return ret;
     }
 
     class Z3Converter : public ConstStmtVisitor<Z3Converter, z3::expr> {
@@ -111,8 +234,10 @@ namespace sloopy {
               z3::expr sube = Visit(Sub);
               if (sube.is_bool()) {
                 return !sube;
+              } else if (sube.is_numeral()) {
+                return sube.ctx().int_val(as_int(sube) ? 0 : 1);
               } else if (sube.is_int()) {
-                return sube != 0;
+                return sube == 0;
               } else {
                 throw exception("unhandled type");
               }
@@ -226,14 +351,9 @@ namespace sloopy {
       }
     };
 
-    machine_int as_int(const z3::expr &E) {
-      machine_int ret;
-      assert(Z3_TRUE == Z3_get_numeral_int64(E.ctx(), E, &ret));
-      return ret;
-    }
-
     enum Monotonicity {
       NotMonotone,        // not monotone
+      UnknownContent,     // *p
       UnknownDirection,   // monotone, but unknown whether increasing or decreasing (m*x)
       Constant,           // constant
       StrictIncreasing,   // strictly increasing
@@ -245,6 +365,7 @@ namespace sloopy {
       std::set<const VarDecl*> Constants;
       std::set<const z3::expr*> Z3AssumeWrapv, Z3AssumeWrapvOrRunsInto;
       std::set<const VarDecl*> AssumeWrapv, AssumeWrapvOrRunsInto;
+      bool AssumeRightArrayContent = false;
       bool AssumeMNeq0 = false;
       bool AssumeLeBoundLtMaxVal = false;
       bool AssumeGeBoundGtMinVal = false;
@@ -289,7 +410,8 @@ namespace sloopy {
       }
 
       // m*x, if m is numeral Numeral, if m is Expression Expression
-      enum MultResult { NotMult, Numeral, Expression };
+      enum class MultResult { NotMult, Numeral, Expression, UnknownContent };
+
       MultResult mult_in(const z3::expr &X, const z3::expr &E, machine_int &mRef) {
         if (E.decl().decl_kind() != Z3_OP_MUL)
           return MultResult::NotMult;
@@ -298,7 +420,8 @@ namespace sloopy {
 
         bool foundX = false;
         bool foundNum = false;
-        bool foundExpr = false;
+        bool foundExprM = false;
+        bool foundDeref = false;
         machine_int m;
         for (unsigned i = 0; i < S.num_args(); i++) {
           z3::expr C = S.arg(i);
@@ -311,21 +434,23 @@ namespace sloopy {
             m = as_int(C);
             foundNum = true;
           } else if (not containsX(X, C)) {
-            foundExpr = true;
+            foundExprM = true;
           } else if (C.decl().name().str() == "__SLOOPY__AddrOf" and eq(C.arg(0), X)) {
             assert(!foundX);
             m = PtrSize;
             foundX = true;
           } else if (C.decl().name().str() == "__SLOOPY__Deref" and eq(C.arg(0), X)) {
-            // TODO AssumeDerefNeq0
+            foundDeref = true;
           } else {
             // contains X
             return MultResult::NotMult;
           }
         }
 
-        if (!foundX) return NotMult;  // constant
-        if (foundExpr) return MultResult::Expression;
+        if (foundDeref) return MultResult::UnknownContent;
+
+        if (!foundX) return MultResult::NotMult;  // constant
+        if (foundExprM) return MultResult::Expression;
         if (foundNum) {
           mRef = m;
           return MultResult::Numeral;
@@ -334,6 +459,8 @@ namespace sloopy {
       }
 
       public:
+      static const unsigned AssumptionSize = 6;
+
       std::pair<Monotonicity,machine_int> isLinearIn(const z3::expr &X, const z3::expr &E) {
         z3::expr S = simplify(E);
 
@@ -348,7 +475,7 @@ namespace sloopy {
         assert(S.num_args());
 
         machine_int m = 0, b = 0;
-        bool setB = false, setM = false, foundExpr = false;
+        bool setB = false, setM = false, foundExprM = false, foundDeref = false;
         for (unsigned i = 0; i < S.num_args(); i++) {
           z3::expr C = S.arg(i);
           if (eq(C, X)) {
@@ -359,13 +486,6 @@ namespace sloopy {
             assert(as_int(C) == 0 or not setB);
             b += as_int(C);
             setB = true;
-          } else if (MultResult Res = mult_in(X, C, m)) {
-            if (Res == MultResult::Numeral) {
-              assert(!setM);
-              setM = true;
-            } else {
-              foundExpr = true;
-            }
           } else if (not containsX(X, C)) {
             /* blank */
           } else if (C.decl().name().str() == "__SLOOPY__AddrOf" and eq(C.arg(0), X)) {
@@ -373,13 +493,26 @@ namespace sloopy {
             m = PtrSize;
             setM = true;
           } else if (C.decl().name().str() == "__SLOOPY__Deref" and eq(C.arg(0), X)) {
-            // TODO AssumeDerefTakesRightValue
+            foundDeref = true;
           } else {
-            return { NotMonotone, 0 };
+            MultResult Res = mult_in(X, C, m);
+            if (Res == MultResult::Numeral) {
+              assert(!setM);
+              setM = true;
+            } else if (Res == MultResult::UnknownContent) {
+              foundDeref = true;
+            } else if (Res != MultResult::NotMult) {
+              foundExprM = true;
+            } else {
+              return { NotMonotone, 0 };
+            }
           }
         }
         
-        if (foundExpr) {
+        if (foundDeref) {
+          return { UnknownContent, 0 };
+        }
+        if (foundExprM) {
           return { UnknownDirection, 0 };
         }
 
@@ -392,26 +525,49 @@ namespace sloopy {
       }
 
       /* Check if X is linear in A, not in B, and will run into B given dir. */
-      bool dropsToZero(const z3::expr &X, const int dir, const Z3_decl_kind DeclKind, const z3::expr &A, const z3::expr &B) {
+      bool dropsToZero(const z3::expr &X, const IncrementSet Increments, const Z3_decl_kind DeclKind, const z3::expr &A, const z3::expr &B) {
         auto Pair = isLinearIn(X, A);
         Monotonicity Mon = Pair.first;
         machine_int m = Pair.second;
 
         if (containsX(X,B)) return false;
 
-        if (Z3_OP_DISTINCT == DeclKind and (dir == 1 or dir == -1)) {
-          if ((Mon == StrictIncreasing and m == 1) or
-              (Mon == StrictDecreasing and m == -1)) {
-            Z3AssumeWrapvOrRunsInto.insert(&X);
+        if (Z3_OP_EQ == DeclKind and not anyUnknown(Increments) and not anyZero(Increments)) {
+          if (Mon == StrictIncreasing or
+              Mon == StrictDecreasing or
+              Mon == UnknownDirection or
+              Mon == UnknownContent) {
+            if (Mon == UnknownContent) {
+              AssumeRightArrayContent = true;
+            } else if (Mon == UnknownDirection) {
+              AssumeMNeq0 = true;
+            }
             return true;
           }
         }
 
-        if (Z3_OP_LE <= DeclKind and DeclKind <= Z3_OP_GT) {
+        if (Z3_OP_DISTINCT == DeclKind and singletonOne(Increments)) {
+          if ((Mon == StrictIncreasing and ((B.is_numeral() and as_int(B) == 0) or m == 1)) or
+              (Mon == StrictDecreasing and ((B.is_numeral() and as_int(B) == 0) or m == -1)) or
+              Mon == UnknownContent) {
+            if (Mon == UnknownContent) {
+              AssumeRightArrayContent = true;
+            } else {
+              Z3AssumeWrapvOrRunsInto.insert(&X);
+            }
+            return true;
+          }
+        }
+
+        if (Z3_OP_LE <= DeclKind and DeclKind <= Z3_OP_GT and
+            (allLtZero(Increments) or allGtZero(Increments))) {
           if (Mon == StrictIncreasing or
               Mon == StrictDecreasing or
-              Mon == UnknownDirection) {
-            if (Mon == UnknownDirection) {
+              Mon == UnknownDirection or
+              Mon == UnknownContent) {
+            if (Mon == UnknownContent) {
+              AssumeRightArrayContent = true;
+            } else if (Mon == UnknownDirection) {
               AssumeMNeq0 = true;
             }
             switch (DeclKind) {
@@ -419,16 +575,16 @@ namespace sloopy {
                 AssumeLeBoundLtMaxVal = true;
               case Z3_OP_LT:
                 if (Mon == UnknownDirection or
-                  (Mon == StrictIncreasing and dir < 0) or
-                  (Mon == StrictDecreasing and dir > 0))
+                  (Mon == StrictIncreasing and allLtZero(Increments)) or
+                  (Mon == StrictDecreasing and allGtZero(Increments)))
                   Z3AssumeWrapv.insert(&X);
                 break;
               case Z3_OP_GE:
                 AssumeGeBoundGtMinVal = true;
               case Z3_OP_GT:
                 if (Mon == UnknownDirection or
-                  (Mon == StrictIncreasing and dir > 0) or
-                  (Mon == StrictDecreasing and dir < 0))
+                  (Mon == StrictIncreasing and allGtZero(Increments)) or
+                  (Mon == StrictDecreasing and allLtZero(Increments)))
                   Z3AssumeWrapv.insert(&X);
                 break;
               default:
@@ -441,10 +597,15 @@ namespace sloopy {
         return false;
       }
 
-      bool dropsToZero(const z3::expr &X, const z3::expr &E, const int dir) {
-        if (dir == 0) return false;
-
+      bool dropsToZero(const z3::expr &X, const z3::expr &E, const IncrementSet Increments) {
         z3::expr S = E;
+
+        /* linear expression */
+        // while (E) is the same as while (E != 0)
+        if (isLinearIn(X, S).first) {
+          S = S != 0;
+          DEBUG_WITH_TYPE("z3", llvm::dbgs() << "treating linear expression as " << S << "\n");
+        }
 
         // propagate negation invards
         if (S.decl().decl_kind() == Z3_OP_NOT) {
@@ -455,9 +616,9 @@ namespace sloopy {
             Z3_ast (*mk_func) (Z3_context, Z3_ast, Z3_ast);
             switch (ChildDeclKind) {
               case Z3_OP_EQ:
-                return dropsToZero(X, S.arg(0).arg(0) != S.arg(0).arg(1), dir);
+                return dropsToZero(X, S.arg(0).arg(0) != S.arg(0).arg(1), Increments);
               case Z3_OP_DISTINCT:
-                return dropsToZero(X, S.arg(0).arg(0) == S.arg(0).arg(1), dir);
+                return dropsToZero(X, S.arg(0).arg(0) == S.arg(0).arg(1), Increments);
               case Z3_OP_LE:
                 mk_func = Z3_mk_gt;
                 break;
@@ -471,21 +632,13 @@ namespace sloopy {
                 mk_func = Z3_mk_le;
                 break;
               case Z3_OP_NOT:
-                return dropsToZero(X, S.arg(0).arg(0), dir);
+                return dropsToZero(X, S.arg(0).arg(0), Increments);
               default:
                 llvm_unreachable("unhandled decl kind");
             }
             Z3_ast r = mk_func(S.ctx(), S.arg(0).arg(0), S.arg(0).arg(1));
-            return dropsToZero(X, z3::expr(S.ctx(), r), dir);
+            return dropsToZero(X, z3::expr(S.ctx(), r), Increments);
           }
-        }
-
-        /* linear expression */
-        auto Pair = isLinearIn(X, S);
-        Monotonicity Mon = Pair.first;
-        if (Mon == StrictIncreasing or Mon == StrictDecreasing) {
-          Z3AssumeWrapv.insert(&X);
-          return true;
         }
 
         Z3_decl_kind DeclKind = S.decl().decl_kind();
@@ -499,7 +652,7 @@ namespace sloopy {
 
         z3::expr lhs = S.arg(0);
         z3::expr rhs = S.arg(1);
-        if (dropsToZero(X, dir, DeclKind, lhs, rhs))
+        if (dropsToZero(X, Increments, DeclKind, lhs, rhs))
           return true;
         switch (DeclKind) {
           case Z3_OP_LE:
@@ -520,7 +673,7 @@ namespace sloopy {
           default:
             llvm_unreachable("unhandled decl kind");
         }
-        if (dropsToZero(X, dir, DeclKind, rhs, lhs))
+        if (dropsToZero(X, Increments, DeclKind, rhs, lhs))
           return true;
 
         return false;
@@ -543,13 +696,13 @@ namespace sloopy {
         }
       }
 
-      bool dropsToZero(const VarDecl *X, const Expr *E, const int dir, const bool negate=false) {
+      bool dropsToZero(const VarDecl *X, const Expr *E, const IncrementSet Increments, const bool negate=false) {
         Z3Converter Z3C;
         try {
           z3::expr z3E = Z3C.Run(E);
           if (negate) {
-            if (!z3E.is_bool()) {
-              return false;
+            if (not z3E.is_bool()) {
+              z3E = z3E == 0;
             }
             z3E = !z3E;
           }
@@ -557,7 +710,7 @@ namespace sloopy {
           try {
             z3::expr z3X = Z3C.exprFor(X);
             Constants = Z3C.getConstants();
-            bool Result = dropsToZero(z3X, z3E, dir);
+            bool Result = dropsToZero(z3X, z3E, Increments);
             for (auto expr : Z3AssumeWrapv) {
               AssumeWrapv.insert(Z3C.exprFor(*expr));
             }
@@ -582,7 +735,7 @@ namespace sloopy {
        * 4 wrapv or runs in the right direction (equality)
        */
       llvm::BitVector getAssumptions() {
-        llvm::BitVector Assumption(5);
+        llvm::BitVector Assumption(AssumptionSize);
         for (auto VD : AssumeWrapv) {
           if (not VD->getType().getTypePtr()->isUnsignedIntegerOrEnumerationType()) {
             Assumption.set(0);
@@ -598,6 +751,7 @@ namespace sloopy {
             break;
           }
         }
+        Assumption[5] = AssumeRightArrayContent;
         return Assumption;
       }
     };

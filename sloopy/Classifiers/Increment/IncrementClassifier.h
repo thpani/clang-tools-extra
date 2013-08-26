@@ -177,92 +177,11 @@ class IncrementClassifier : public LoopClassifier {
 
       return In[Header];
     }
-
-    struct AugComp;
-
-    class AugInt {
-      friend struct AugComp;
-
-      typedef int longest_int;
-      bool Unknown = false;
-      longest_int Value = 0;
-
-      public:
-      AugInt() {}
-      AugInt(int i) : Value(i) {}
-      static AugInt UnknownAugInt () {
-        AugInt A;
-        A.Unknown = true;
-        return A;
-      }
-
-      bool isUnknown() const {
-        return Unknown;
-      }
-      void setUnknown() {
-        Unknown = true;
-      }
-      longest_int getVal() const {
-        assert(not Unknown);
-        return Value;
-      }
-
-      std::string str() const {
-        if (Unknown) return "Unknown";
-        else {
-          std::stringstream ss;
-          ss << Value;
-          return ss.str();
-        }
-      }
-
-      AugInt operator+(const AugInt &Other) const {
-        if (Unknown or Other.Unknown) return UnknownAugInt();
-        if ((Value > 0 and Other.Value > 0 and Value > (std::numeric_limits<longest_int>::max() - Other.Value)) or 
-            (Value < 0 and Other.Value < 0 and Value < (std::numeric_limits<longest_int>::min() - Other.Value))) {
-          llvm_unreachable("overflow");
-          return UnknownAugInt();
-        }
-        return AugInt(Value + Other.Value);
-      }
-      void operator+=(const int i) {
-        if (Unknown) return;
-
-        AugInt Result = *this + AugInt(i);
-
-        Unknown = Result.Unknown;
-        Value   = Result.Value;
-      }
-      bool operator<(const AugInt &Other) const {
-        assert (not Unknown and not Other.Unknown);
-        return Value < Other.Value;
-      }
-      bool operator>(const AugInt &Other) const {
-        assert (not Unknown and not Other.Unknown);
-        return Value > Other.Value;
-      }
-      // Unknown == Unknown - othw fixed point iterations dont terminate
-      bool operator==(const AugInt &Other) const {
-        /* if (Unknown or Other.Unknown) return false; */
-        return Unknown == Other.Unknown and Value == Other.Value;
-      }
-      bool operator!=(const AugInt &Other) const {
-        /* if (Unknown or Other.Unknown) return false; */
-        return not ((*this) == Other);
-      }
-    };
-
-    struct AugComp {
-      bool operator() (const AugInt& lhs, const AugInt& rhs) const {
-        return lhs.Unknown < rhs.Unknown or
-              (lhs.Unknown == rhs.Unknown and lhs.Value < rhs.Value);
-      }
-    };
     
     struct CheckBodyResult {
       unsigned MaxAssignments;
       unsigned MinAssignments;
-      std::set<AugInt, AugComp> AccumulatedIncrement;
+      IncrementSet AccumulatedIncrement;
 
       bool operator==(const CheckBodyResult &Other) const {
         return MaxAssignments == Other.MaxAssignments and
@@ -463,7 +382,7 @@ class IncrementClassifier : public LoopClassifier {
         LoopVarCandidatesEachPath.insert(I);
       }
 
-      llvm::BitVector Assumption(5);
+      llvm::BitVector Assumption(LinearHelper::AssumptionSize);
       std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks;
       // find provably terminating blocks
       for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
@@ -506,44 +425,40 @@ class IncrementClassifier : public LoopClassifier {
 
           auto MaxMin = checkBody(Loop, I);
           DEBUG( llvm::dbgs() << I.VD->getNameAsString() << " IncrementSize: " << MaxMin.AccumulatedIncrement.size() << "\n" );
-          if (MaxMin.AccumulatedIncrement.size() == 1 and not MaxMin.AccumulatedIncrement.begin()->isUnknown()) {
-            auto i = *MaxMin.AccumulatedIncrement.begin();
-            DEBUG( llvm::dbgs() << "Increment: " << i.str() << "\n" );
 
-            // see if we can find a proof
-            if (whichBranch == 1) {
-              // cond needs to become false to exit the loop
-              if (not H.dropsToZero(I.VD, Cond, i.getVal())) {
-                continue;
-              }
-            } else if (whichBranch == 0) {
-              // cond needs to become true to exit the loop
-              if (not H.dropsToZero(I.VD, Cond, i.getVal(), true)) {
-                continue;
-              }
-            } else {
-              llvm_unreachable("exit branch >1");
-            }
-
-            // check if all constants are loop-invariant
-            bool AllVarsConst = true;
-            for (auto VD : H.getConstants()) {
-              if (VD == I.VD) continue;
-              AllVarsConst = AllVarsConst and F.isInvariant(VD);
-              if (!AllVarsConst) {
-                DEBUG( llvm::dbgs() << VD->getNameAsString() << " is not const\n" );
-                break;
-              }
-            }
-            if (!AllVarsConst) {
+          // see if we can find a proof
+          if (whichBranch == 1) {
+            // cond needs to become false to exit the loop
+            if (not H.dropsToZero(I.VD, Cond, MaxMin.AccumulatedIncrement)) {
               continue;
             }
-
-            auto A = H.getAssumptions();
-            assert(Assumption.size() == A.size() and "bitvectors should be same size");
-            Assumption |= A;
-            ProvablyTerminatingBlocks.insert(Block);
+          } else if (whichBranch == 0) {
+            // cond needs to become true to exit the loop
+            if (not H.dropsToZero(I.VD, Cond, MaxMin.AccumulatedIncrement, true)) {
+              continue;
+            }
+          } else {
+            llvm_unreachable("exit branch >1");
           }
+
+          // check if all constants are loop-invariant
+          bool AllVarsConst = true;
+          for (auto VD : H.getConstants()) {
+            if (VD == I.VD) continue;
+            AllVarsConst = AllVarsConst and F.isInvariant(VD);
+            if (!AllVarsConst) {
+              DEBUG( llvm::dbgs() << VD->getNameAsString() << " is not const\n" );
+              break;
+            }
+          }
+          if (!AllVarsConst) {
+            continue;
+          }
+
+          auto A = H.getAssumptions();
+          assert(Assumption.size() == A.size() and "bitvectors should be same size");
+          Assumption |= A;
+          ProvablyTerminatingBlocks.insert(Block);
         }
       }
       DEBUG( llvm::dbgs() << "ProvablyTerminatingBlocks: " << ProvablyTerminatingBlocks.size() << "\n" );
@@ -558,6 +473,7 @@ class IncrementClassifier : public LoopClassifier {
         LoopClassifier::classify(Loop, "ProvedWithAssumptionGeBoundNotMin", Assumption[2]);
         LoopClassifier::classify(Loop, "ProvedWithAssumptionMNeq0", Assumption[3]);
         LoopClassifier::classify(Loop, "ProvedWithAssumptionWrapvOrRunsInto", Assumption[4]);
+        LoopClassifier::classify(Loop, "ProvedWithAssumptionRightArrayContent", Assumption[5]);
       }
 #undef DEBUG_TYPE
 #define DEBUG_TYPE ""
