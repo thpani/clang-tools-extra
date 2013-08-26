@@ -179,11 +179,22 @@ namespace sloopy {
 
       z3::expr Run(const Expr* S) {
         MapClangZ3.clear();
-        return Visit(S);
+        return Visit(S, false);
       }
 
-      z3::expr Visit(const Expr* S) {
-        return ConstStmtVisitor<Z3Converter, z3::expr>::Visit(S->IgnoreParenCasts());
+      z3::expr Visit(const Expr* S, bool deep=true) {
+        z3::expr E = ConstStmtVisitor<Z3Converter, z3::expr>::Visit(S->IgnoreParenCasts());
+
+        if (not deep) return E;
+
+        if (E.is_int()) {
+          return E;
+        } else if (E.is_bool()) {
+          Z3_ast r = Z3_mk_ite(E.ctx(), E, E.ctx().int_val(1), E.ctx().int_val(0));
+          return z3::expr(*Ctx, r);
+        } else {
+          llvm_unreachable("unhandled sort");
+        }
       }
 
       const VarDecl *exprFor(const z3::expr &expr) {
@@ -231,7 +242,7 @@ namespace sloopy {
             return Deref(Visit(Sub));
           case UO_LNot:
             {
-              z3::expr sube = Visit(Sub);
+              z3::expr sube = Visit(Sub, false);
               if (sube.is_bool()) {
                 return !sube;
               } else if (sube.is_numeral()) {
@@ -267,7 +278,8 @@ namespace sloopy {
         // call
         std::vector<z3::expr> args;
         for (unsigned i=0; i<numArgs; i++) {
-          args.push_back(Visit(CE->getArg(i)));
+          auto argExpr = Visit(CE->getArg(i));
+          args.push_back(argExpr);
         }
         return f(CE->getNumArgs(), &args[0]);
       }
