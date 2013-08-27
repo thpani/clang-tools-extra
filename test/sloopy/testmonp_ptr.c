@@ -95,3 +95,7 @@ void DerefE() { while (*P) { P++; } }
 // CHECK: Proved: 1
 // CHECK: ProvedWithAssumptionRightArrayContent: 1
 void DerefE2() { while (!*P) { P++; } }
+
+// FIXME: Proved: 1
+// FIXME: ProvedWithAssumptionRightArrayContent: 1
+void DerefStr() { while (*s != 'l') { s++; } }
