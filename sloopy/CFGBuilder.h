@@ -347,6 +347,8 @@ class FunctionCallback : public MatchFinder::MatchCallback {
       AnalysisDeclContext *AC = mgr.getContext(D);
       CFG *CFG = AC->getCFG();
 
+      if (ViewCFG) CFG->viewCFG(LangOptions());
+
       ControlDependenceGraph CDG;
       CDG.buildControlDependenceSubgraph(*AC);
 
