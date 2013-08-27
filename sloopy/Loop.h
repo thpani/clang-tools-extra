@@ -554,6 +554,9 @@ void NaturalLoop::build(
           NaturalLoopBlock *Pred = *SI;
           DEBUG(llvm::dbgs() << "\tRemoving " << Current->getBlockID() << " from " << Pred->getBlockID() << "'s successors\n");
           Pred->Succs.remove(Current);
+
+          std::set<NaturalLoopBlock *> s(Pred->Succs.begin(), Pred->Succs.end());
+          Pred->Succs.assign( s.begin(), s.end() );
         }
         for (NaturalLoopBlock::const_succ_iterator SI = Current->succ_begin(),
                                                    SE = Current->succ_end();
@@ -562,6 +565,9 @@ void NaturalLoop::build(
           if (not Succ) continue;
           DEBUG(llvm::dbgs() << "\tRemoving " << Current->getBlockID() << " from " << Succ->getBlockID() << "'s preds\n");
           Succ->Preds.remove(Current);
+
+          std::set<NaturalLoopBlock *> s(Succ->Preds.begin(), Succ->Preds.end());
+          Succ->Preds.assign( s.begin(), s.end() );
         }
         if (removeBlock) {
           DEBUG(llvm::dbgs() << "\tDeleting " << Current->getBlockID() << "\n");
