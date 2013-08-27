@@ -528,12 +528,12 @@ void NaturalLoop::build(
 
         bool removeBlock = true;
         for (NaturalLoopBlock::const_pred_iterator PI = Current->pred_begin(),
-                                                  PE = Current->pred_end();
-                                                  PI != PE; PI++) {
+                                                   PE = Current->pred_end();
+                                                   PI != PE; PI++) {
           NaturalLoopBlock *Pred = *PI;
           for (NaturalLoopBlock::const_succ_iterator SI = Current->succ_begin(),
-                                                      SE = Current->succ_end();
-                                                      SI != SE; SI++) {
+                                                     SE = Current->succ_end();
+                                                     SI != SE; SI++) {
             NaturalLoopBlock *Succ = *SI;
             if (not Succ) continue;
             // TODO handle self-loops better
@@ -542,14 +542,22 @@ void NaturalLoop::build(
               continue;
             }
 
-            std::replace(Pred->Succs.begin(), Pred->Succs.end(), Current, Succ);
+            DEBUG(llvm::dbgs() << "\tAdding " << Succ->getBlockID() << " to " << Pred->getBlockID() << "'s successors\n");
+            Pred->Succs.push_back(Succ);
             DEBUG(llvm::dbgs() << "\tAdding " << Pred->getBlockID() << " to " << Succ->getBlockID() << "'s preds\n");
             Succ->Preds.push_back(Pred);
           }
         }
+        for (NaturalLoopBlock::const_pred_iterator SI = Current->pred_begin(),
+                                                   SE = Current->pred_end();
+                                                   SI != SE; SI++) {
+          NaturalLoopBlock *Pred = *SI;
+          DEBUG(llvm::dbgs() << "\tRemoving " << Current->getBlockID() << " from " << Pred->getBlockID() << "'s successors\n");
+          Pred->Succs.remove(Current);
+        }
         for (NaturalLoopBlock::const_succ_iterator SI = Current->succ_begin(),
-                                                    SE = Current->succ_end();
-                                                    SI != SE; SI++) {
+                                                   SE = Current->succ_end();
+                                                   SI != SE; SI++) {
           NaturalLoopBlock *Succ = *SI;
           if (not Succ) continue;
           DEBUG(llvm::dbgs() << "\tRemoving " << Current->getBlockID() << " from " << Succ->getBlockID() << "'s preds\n");
