@@ -96,6 +96,6 @@ void DerefE() { while (*P) { P++; } }
 // CHECK: ProvedWithAssumptionRightArrayContent: 1
 void DerefE2() { while (!*P) { P++; } }
 
-// FIXME: Proved: 1
-// FIXME: ProvedWithAssumptionRightArrayContent: 1
+// CHECK: Proved: 1
+// CHECK: ProvedWithAssumptionRightArrayContent: 1
 void DerefOffset() { while (*(P+I) < G()) { P++; } }

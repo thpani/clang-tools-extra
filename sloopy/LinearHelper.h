@@ -365,9 +365,9 @@ namespace sloopy {
 
     enum Monotonicity {
       NotMonotone,        // not monotone
+      Constant,           // constant
       UnknownContent,     // *p
       UnknownDirection,   // monotone, but unknown whether increasing or decreasing (m*x)
-      Constant,           // constant
       StrictIncreasing,   // strictly increasing
       StrictDecreasing,   // strictly decreasing
     };
@@ -504,7 +504,10 @@ namespace sloopy {
             assert(!setM);
             m = PtrSize;
             setM = true;
-          } else if (C.decl().name().str() == "__SLOOPY__Deref" and eq(C.arg(0), X)) {
+          } else if (
+              C.decl().name().str() == "__SLOOPY__Deref" and
+              (isLinearIn(X, C.arg(0)).first == StrictIncreasing or
+               isLinearIn(X, C.arg(0)).first == StrictDecreasing)) {
             foundDeref = true;
           } else {
             MultResult Res = mult_in(X, C, m);
@@ -587,7 +590,8 @@ namespace sloopy {
                 AssumeLeBoundLtMaxVal = true;
               case Z3_OP_LT:
                 if ((Mon == StrictIncreasing and allGtZero(Increments)) or
-                    (Mon == StrictDecreasing and allLtZero(Increments))) {
+                    (Mon == StrictDecreasing and allLtZero(Increments)) or
+                    AssumeRightArrayContent) {
                   return true;
                 } else {
                   Z3AssumeWrapv.insert(&X);
@@ -597,7 +601,8 @@ namespace sloopy {
                 AssumeGeBoundGtMinVal = true;
               case Z3_OP_GT:
                 if ((Mon == StrictIncreasing and allLtZero(Increments)) or
-                    (Mon == StrictDecreasing and allGtZero(Increments))) {
+                    (Mon == StrictDecreasing and allGtZero(Increments)) or
+                    AssumeRightArrayContent) {
                   return true;
                 } else {
                   Z3AssumeWrapv.insert(&X);
