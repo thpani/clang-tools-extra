@@ -4,6 +4,7 @@ int *P, *Q;
 int *N, *M;
 int *F();
 int G();
+int S(const char *);
 
 const char *s = "nudelsieb";
 
@@ -96,6 +97,10 @@ void DerefE() { while (*P) { P++; } }
 // CHECK: ProvedWithAssumptionRightArrayContent: 1
 void DerefE2() { while (!*P) { P++; } }
 
-// FIXME: Proved: 1
-// FIXME: ProvedWithAssumptionRightArrayContent: 1
+// CHECK: Proved: 1
+// CHECK: ProvedWithAssumptionRightArrayContent: 1
 void DerefStr() { while (*s != 'l') { s++; } }
+
+// CHECK: Proved: 1
+// CHECK: ProvedWithAssumptionWrapvOrRunsInto: 1
+void StringLit() { while (I != S("teststring")) { I++; } }
