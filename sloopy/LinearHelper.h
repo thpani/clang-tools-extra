@@ -157,6 +157,7 @@ namespace sloopy {
       const z3::func_decl AddrOf, Deref;
       const bool NextExpression;
       std::map<const VarDecl*, z3::expr> MapClangZ3;
+      unsigned StringLiteralCtr = 0;
 
       public:
 
@@ -346,6 +347,16 @@ namespace sloopy {
 
       z3::expr VisitIntegerLiteral(const IntegerLiteral *L) {
         return Ctx->int_val(L->getValue().getSExtValue());
+      }
+
+      z3::expr VisitCharacterLiteral(const CharacterLiteral *L) {
+        return Ctx->int_val(L->getValue());
+      }
+
+      z3::expr VisitStringLiteral(const StringLiteral *L) {
+        std::stringstream ss;
+        ss << "__SLOOPY__StringLiteral_" << (StringLiteralCtr++);
+        return Ctx->int_const(ss.str().c_str());
       }
 
       z3::expr VisitDeclRefExpr(const DeclRefExpr *E) {
