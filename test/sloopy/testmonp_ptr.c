@@ -104,3 +104,7 @@ void DerefStr() { while (*s != 'l') { s++; } }
 // CHECK: Proved: 1
 // CHECK: ProvedWithAssumptionWrapvOrRunsInto: 1
 void StringLit() { while (I != S("teststring")) { I++; } }
+
+// CHECK: Proved: 1
+// CHECK: ProvedWithAssumptionRightArrayContent: 1
+void DerefOffset() { while (*(P+I) < G()) { P++; } }
