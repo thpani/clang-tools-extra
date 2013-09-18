@@ -145,6 +145,60 @@ class IncrementClassifier : public LoopClassifier {
     bool termCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
       const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
 
+      for (auto ProvablyTerminatingBlock : ProvablyTerminatingBlocks) {
+
+        std::map<const NaturalLoopBlock *, std::pair<unsigned long, bool>> In, Out, OldOut;
+
+        // Initialize all blocks    (1) + (2)
+        for (auto Block : *L) {
+          Out[Block] = { 0, false };
+        }
+
+        // while OUT changes
+        while (Out != OldOut) {     // (3)
+          OldOut = Out;
+          // for each basic block other than entry
+          for (auto Block : *L) {   // (4)
+            if (not Block->pred_size()) {
+              continue;
+            }
+
+            // meet (propagate OUT -> IN)
+            bool meet = true;
+            unsigned long min = std::numeric_limits<unsigned long>::max();
+            for (NaturalLoopBlock::const_pred_iterator P = Block->pred_begin(),
+                                                      E = Block->pred_end();
+                                                      P != E; P++) {    // (5)
+              const NaturalLoopBlock *Pred = *P;
+              meet = meet and Out[Pred].second;
+              min = Out[Pred].first < min ? Out[Pred].first : min;
+            }
+            In[Block] = { min, meet };
+
+            if (Block == Header) {
+              Out[Block] = { Block->succ_size() ? 1 : 0, Block == ProvablyTerminatingBlock };
+            } else {
+              // compute OUT / f_B(x)
+              /* llvm::errs() << Block->getBlockID() << ": " << min << "\n"; */
+              assert(min < std::numeric_limits<unsigned long>::max() && "overflow");
+              Out[Block] = { Block->succ_size() ? min+1 : min,
+                (min == In[Header].first and Block == ProvablyTerminatingBlock) or In[Block].second
+              };   // (6)
+            }
+          }
+        }
+
+        if (In[Header].second) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    bool someTermCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
+      const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
+
       std::map<const NaturalLoopBlock *, bool> In, Out, OldOut;
 
       // Initialize all blocks    (1) + (2)
@@ -177,7 +231,7 @@ class IncrementClassifier : public LoopClassifier {
 
       return In[Header];
     }
-    
+
     struct CheckBodyResult {
       unsigned MaxAssignments;
       unsigned MinAssignments;
