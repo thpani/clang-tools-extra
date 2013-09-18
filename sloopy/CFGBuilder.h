@@ -453,9 +453,11 @@ class FunctionCallback : public MatchFinder::MatchCallback {
 #define DEBUG_TYPE ""
 
         auto LocationPair = Unsliced->getLoopStmtLocation(Result.SourceManager);
+        auto LocationID = Unsliced->getLoopStmtID(Result.SourceManager);
         std::stringstream sstm;
         sstm << LocationPair.first.getFilename()
              << " -func " << D->getNameAsString()
+             << " -lineid " << LocationID.getLine()
              << " -line " << LocationPair.first.getLine()
              << " -linebe ";
         for (auto PLBack : LocationPair.second) {

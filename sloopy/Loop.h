@@ -173,6 +173,11 @@ class NaturalLoop {
       }
     }
 
+    const PresumedLoc getLoopStmtID(const SourceManager* SM) const {
+      SourceLocation PL = LoopStmt->getSourceRange().getBegin();
+      return SM->getPresumedLoc(PL);
+    }
+
     std::pair<const PresumedLoc, const std::vector<PresumedLoc>> getLoopStmtLocation(const SourceManager* SM) const {
       const Stmt *S = LoopStmt;
       if (const GotoStmt *GS = dyn_cast<GotoStmt>(S)) {
