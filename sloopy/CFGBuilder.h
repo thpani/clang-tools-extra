@@ -39,7 +39,20 @@ class ControlDependenceGraph {
   std::map<const CFGBlock*, std::vector<const CFGBlock*>> CDAdj;
 
   public:
-    void buildControlDependenceSubgraph(AnalysisDeclContext &AC) {
+    void dump() {
+      llvm::errs() << "CDG\n===\n";
+      for (auto Pair : CDAdj) {
+        auto *Block = Pair.first;
+        auto DepOn  = Pair.second;
+        llvm::errs() << Block->getBlockID() << ": ";
+        for (auto *Block2 : DepOn) {
+          llvm::errs() << Block2->getBlockID() << ", ";
+        }
+        llvm::errs() << "\n";
+      }
+    }
+
+    void build(AnalysisDeclContext &AC) {
       // obtain postdom tree
       CFG *CFG = AC.getCFG();
       PostDominatorTree PD;
@@ -350,7 +363,8 @@ class FunctionCallback : public MatchFinder::MatchCallback {
       if (ViewCFG) CFG->viewCFG(LangOptions());
 
       ControlDependenceGraph CDG;
-      CDG.buildControlDependenceSubgraph(*AC);
+      CDG.build(*AC);
+      if (DumpCDG) CDG.dump();
 
       DominatorTree Dom;
       Dom.buildDominatorTree(*AC);
