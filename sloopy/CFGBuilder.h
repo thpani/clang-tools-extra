@@ -21,10 +21,15 @@ using namespace clang::ast_matchers;
 
 using namespace sloopy;
 
-static bool isSpecified(const FunctionDecl *D, const PresumedLoc &PL) {
-  return (Function.size() == 0 || D->getNameAsString() == Function) &&
+static bool isSpecified(const FunctionDecl *D, std::vector<PresumedLoc> PLs) {
+  for (auto PL : PLs) {
+    if ((Function.size() == 0 || D->getNameAsString() == Function) &&
          (File.size() == 0 || PL.getFilename() == File) &&
-         (Line == 0 || PL.getLine() == Line);
+        (Line == 0 || PL.getLine() == Line)) {
+          return true;
+    }
+  }
+  return false;
 }
 
 class PostDominatorTree : public DominatorTree {
@@ -452,15 +457,12 @@ class FunctionCallback : public MatchFinder::MatchCallback {
 #undef DEBUG_TYPE
 #define DEBUG_TYPE ""
 
-        auto LocationPair = Unsliced->getLoopStmtLocation(Result.SourceManager);
         auto LocationID = Unsliced->getLoopStmtID(Result.SourceManager);
         std::stringstream sstm;
-        sstm << LocationPair.first.getFilename()
+        sstm << LocationID.begin()->getFilename()
              << " -func " << D->getNameAsString()
-             << " -lineid " << LocationID.getLine()
-             << " -line " << LocationPair.first.getLine()
-             << " -linebe ";
-        for (auto PLBack : LocationPair.second) {
+             << " -lines ";
+        for (auto PLBack : LocationID) {
           sstm << PLBack.getLine() << ",";
         }
         LoopLocationMap[Unsliced] = sstm.str();
@@ -481,9 +483,8 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         const NaturalLoop *SlicedAllLoops = M[MLD][1];
         const NaturalLoop *SlicedOuterLoop = M[MLD][2];
 
-        auto LocationPair = Unsliced->getLoopStmtLocation(Result.SourceManager);
-        PresumedLoc PL = LocationPair.first;
-        if (isSpecified(D, PL)) {
+        auto LocationID = Unsliced->getLoopStmtID(Result.SourceManager);
+        if (isSpecified(D, LocationID)) {
           if (DumpControlVars) {
             for (auto VD : Unsliced->getControlVars()) {
               llvm::errs() << "Control variable: " << VD->getNameAsString() << " (" << VD->getType().getAsString() << ")\n";
@@ -540,7 +541,7 @@ class FunctionCallback : public MatchFinder::MatchCallback {
           ProperlyNestedLoops.push_back(M[**I][1]);
         }
 
-        C->classify(isSpecified(D, PL), Unsliced, SlicedAllLoops, SlicedOuterLoop, OutermostNestingLoop, NestingLoops, ProperlyNestedLoops);
+        C->classify(isSpecified(D, LocationID), Unsliced, SlicedAllLoops, SlicedOuterLoop, OutermostNestingLoop, NestingLoops, ProperlyNestedLoops);
       }
 
       // InfluencesOuter is only classified when we reach the outer loop,
@@ -548,10 +549,9 @@ class FunctionCallback : public MatchFinder::MatchCallback {
       for (auto Pair : M) {
         auto MLD = Pair.first;
         const NaturalLoop *Unsliced = M[MLD][0];
-        auto LocationPair = Unsliced->getLoopStmtLocation(Result.SourceManager);
-        PresumedLoc PL = LocationPair.first;
+        auto LocationID = Unsliced->getLoopStmtID(Result.SourceManager);
 
-        if (isSpecified(D, PL)) {
+        if (isSpecified(D, LocationID)) {
           if ((HasClass == std::string() && !LoopStats) ||
               (HasClass != std::string() && LoopClassifier::hasClass(Unsliced, HasClass))) {
             llvm::errs() << LoopLocationMap[Unsliced] << "\n";

@@ -173,49 +173,30 @@ class NaturalLoop {
       }
     }
 
-    const PresumedLoc getLoopStmtID(const SourceManager* SM) const {
-      SourceLocation PL = LoopStmt->getSourceRange().getBegin();
-      return SM->getPresumedLoc(PL);
-    }
+    std::vector<PresumedLoc> getLoopStmtID(const SourceManager* SM) const {
+      std::vector<PresumedLoc> Result;
 
-    std::pair<const PresumedLoc, const std::vector<PresumedLoc>> getLoopStmtLocation(const SourceManager* SM) const {
-      const Stmt *S = LoopStmt;
-      if (const GotoStmt *GS = dyn_cast<GotoStmt>(S)) {
-        S = GS->getLabel()->getStmt();
-      }
-      SourceLocation SLHead = S->getSourceRange().getBegin();
-      PresumedLoc PLHead = SM->getPresumedLoc(SLHead);
-
-      std::vector<PresumedLoc> PLBacks;
       for (const CFGBlock *Tail : Tails) {
-        const Stmt *S;
-        if (Tail->getTerminator()) {
-          S = Tail->getTerminator().getStmt();
-        } else {
-          S = Tail->getLoopTarget();
+        const Stmt *S = nullptr;
+        if (const ContinueStmt *CS = dyn_cast_or_null<ContinueStmt>(Tail->getTerminator().getStmt())) {
+          S = CS;
         }
         if (!S) {
-          // block before labeled block that is the header
-          for (CFGBlock::const_reverse_iterator I = Tail->rbegin(),
-                                                E = Tail->rend();
-                                                I != E; I++) {
-            auto CStmt = I->getAs<CFGStmt>();
-            if (CStmt) {
-              S = CStmt->getStmt();
-              break;
-            }
+          S = Tail->getLoopTarget();
           }
           if (!S) {
-            S = Tail->getLabel();
+          if (const GotoStmt *GS = dyn_cast_or_null<GotoStmt>(Tail->getTerminator().getStmt())) {
+            S = GS;
+          } else {
+            llvm_unreachable("");
           }
         }
-        assert(S);
-        SourceLocation SLBack = S->getSourceRange().getEnd();
-        PresumedLoc PLBack = SM->getPresumedLoc(SLBack);
-        PLBacks.push_back(PLBack);
+        assert(S && "no statement");
+        const SourceLocation PL = S->getSourceRange().getBegin();
+        Result.push_back(SM->getPresumedLoc(PL));
       }
 
-      return std::make_pair(PLHead, PLBacks);
+      return Result;
     }
 
     std::set<const VarDecl*> getControlVars() const {
