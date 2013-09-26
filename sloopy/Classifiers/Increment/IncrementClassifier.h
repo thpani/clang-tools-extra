@@ -170,6 +170,7 @@ class IncrementClassifier : public LoopClassifier {
                                                       E = Block->pred_end();
                                                       P != E; P++) {    // (5)
               const NaturalLoopBlock *Pred = *P;
+              if (Pred == &L->getEntry()) continue;
               meet = meet and Out[Pred].second;
               min = Out[Pred].first < min ? Out[Pred].first : min;
             }
