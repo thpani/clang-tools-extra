@@ -24,7 +24,7 @@ using namespace sloopy;
 static bool isSpecified(const FunctionDecl *D, std::vector<PresumedLoc> PLs) {
   for (auto PL : PLs) {
     if ((Function.size() == 0 || D->getNameAsString() == Function) &&
-         (File.size() == 0 || PL.getFilename() == File) &&
+        (File.size() == 0 || PL.getFilename() == File) &&
         (Line == 0 || PL.getLine() == Line)) {
           return true;
     }
@@ -275,9 +275,9 @@ static const NaturalLoop *buildNaturalLoop(
 
   NaturalLoop *Sliced = new NaturalLoop();
   Sliced->build(Header, Tails, Body, ControlVars, &TrackedStmts, &TrackedBlocks, Unsliced);
-    return Sliced;
+  return Sliced;
 
-  }
+}
 
 static const NaturalLoop *buildNaturalLoop(
     const MergedLoopDescriptor &Loop,
@@ -289,7 +289,7 @@ static const NaturalLoop *buildNaturalLoop(
   NaturalLoop *Unsliced = new NaturalLoop();
   Unsliced->build(Header, Tails, Body, ControlVars);
     return Unsliced;
-  }
+}
 
 static SlicingCriterion slicingCriterionOuterLoop(const MergedLoopDescriptor &Loop) {
   // collect initial control variables
@@ -462,8 +462,12 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         sstm << LocationID.begin()->getFilename()
              << " -func " << D->getNameAsString()
              << " -lines ";
+        std::set<unsigned> Lines;
         for (auto PLBack : LocationID) {
-          sstm << PLBack.getLine() << ",";
+          Lines.insert(PLBack.getLine());
+        }
+        for (auto Line : Lines) {
+          sstm << Line << ",";
         }
         LoopLocationMap[Unsliced] = sstm.str();
 

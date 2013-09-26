@@ -175,20 +175,29 @@ class NaturalLoop {
 
     std::vector<PresumedLoc> getLoopStmtID(const SourceManager* SM) const {
       std::vector<PresumedLoc> Result;
+      std::stack<const CFGBlock*> Worklist;
+      for (auto * Tail : Tails) {
+        Worklist.push(Tail);
+      }
 
-      for (const CFGBlock *Tail : Tails) {
+      while (Worklist.size()) {
+        const CFGBlock *Tail = Worklist.top();
+        Worklist.pop();
+
         const Stmt *S = nullptr;
-        if (const ContinueStmt *CS = dyn_cast_or_null<ContinueStmt>(Tail->getTerminator().getStmt())) {
-          S = CS;
-        }
-        if (!S) {
-          S = Tail->getLoopTarget();
+        if (isTransitionBlock(Tail)) {
+          for (CFGBlock::const_pred_iterator P = Tail->pred_begin(),
+                                             E = Tail->pred_end();
+                                             P != E; P++) {
+            Worklist.push(*P);
           }
-          if (!S) {
-          if (const GotoStmt *GS = dyn_cast_or_null<GotoStmt>(Tail->getTerminator().getStmt())) {
-            S = GS;
+          S = LoopStmt;
+        } else {
+          // use line of CONTINUE rather than DO/FOR/WHILE
+          if (const ContinueStmt *CS = dyn_cast_or_null<ContinueStmt>(Tail->getTerminator().getStmt())) {
+            S = CS;
           } else {
-            llvm_unreachable("");
+            S = LoopStmt;
           }
         }
         assert(S && "no statement");
@@ -394,17 +403,17 @@ void NaturalLoop::build(
   this->ControlVars = ControlVars;
   this->Unsliced = Unsliced;
 
-  const CFGBlock *Tail = *Tails.begin();
   // FOR, WHILE, DO-WHILE
-  LoopStmt = Tail->getLoopTarget();
+  for (const CFGBlock *Tail : Tails) {
+    LoopStmt = Tail->getLoopTarget();
+    if (LoopStmt) break;
+  }
   if (!LoopStmt) {
-    for (const CFGBlock *Tail : Tails) {
-      if (const GotoStmt *GS = dyn_cast_or_null<GotoStmt>(Tail->getTerminator().getStmt())) {
-        LoopStmt = GS;
-      } else {
-        LoopStmt = Header->getLabel();
-        break;
-      }
+    const CFGBlock *Tail = *Tails.begin();
+    if (const GotoStmt *GS = dyn_cast_or_null<GotoStmt>(Tail->getTerminator().getStmt())) {
+      LoopStmt = GS;
+    } else {
+      LoopStmt = Header->getLabel();
     }
   }
   assert(LoopStmt && "No loop stmt!");
