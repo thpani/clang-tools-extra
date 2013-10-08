@@ -196,6 +196,8 @@ class NaturalLoop {
           // use line of CONTINUE rather than DO/FOR/WHILE
           if (const ContinueStmt *CS = dyn_cast_or_null<ContinueStmt>(Tail->getTerminator().getStmt())) {
             S = CS;
+          } else if (const GotoStmt *CS = dyn_cast_or_null<GotoStmt>(Tail->getTerminator().getStmt())) {
+            S = CS;
           } else {
             S = LoopStmt;
           }
