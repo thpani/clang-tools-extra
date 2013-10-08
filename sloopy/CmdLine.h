@@ -25,3 +25,4 @@ llvm::cl::opt<std::string> File("file");
 llvm::cl::opt<unsigned> Line("line");
 llvm::cl::opt<bool> DumpZ3("dump-z3");
 llvm::cl::opt<bool> EnableAmortized("enable-amortized");
+llvm::cl::opt<bool> POnlyProve("Ponly-prove");

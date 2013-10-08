@@ -551,120 +551,125 @@ class IncrementClassifier : public LoopClassifier {
 
     std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const throw () {
       classifyProve(Loop);
+      
+      if (not POnlyProve) {
 
-      // do we have the right # of exit arcs?
-      unsigned PredSize = Loop->getExit().pred_size();
-      if (Constr.ECConstr != ANY_EXIT && PredSize != Constr.ECConstr) {
-        LoopClassifier::classify(Loop, Constr.str(), Marker, "WrongExitArcs", false);
-        return std::set<IncrementLoopInfo>();
-      }
-      if (PredSize == 0) {
-        LoopClassifier::classify(Loop, Constr.str(), Marker, "NoExitArcs", false);
-        return std::set<IncrementLoopInfo>();
-      }
+        // do we have the right # of exit arcs?
+        unsigned PredSize = Loop->getExit().pred_size();
+        if (Constr.ECConstr != ANY_EXIT && PredSize != Constr.ECConstr) {
+          LoopClassifier::classify(Loop, Constr.str(), Marker, "WrongExitArcs", false);
+          return std::set<IncrementLoopInfo>();
+        }
+        if (PredSize == 0) {
+          LoopClassifier::classify(Loop, Constr.str(), Marker, "NoExitArcs", false);
+          return std::set<IncrementLoopInfo>();
+        }
 
-      // are there any increments in this loop?
-      LoopVariableFinder Finder(this);
-      const std::set<IncrementInfo> LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
-      if (LoopVarCandidates.size() == 0) {
-        LoopClassifier::classify(Loop, Constr.str(), Marker, "NoLoopVarCandidate", false);
-        return std::set<IncrementLoopInfo>();
-      }
+        // are there any increments in this loop?
+        LoopVariableFinder Finder(this);
+        const std::set<IncrementInfo> LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
+        if (LoopVarCandidates.size() == 0) {
+          LoopClassifier::classify(Loop, Constr.str(), Marker, "NoLoopVarCandidate", false);
+          return std::set<IncrementLoopInfo>();
+        }
 
-      std::set<std::string> Reasons;  // why the (IncrementInfo, Cond) pairs aren't wellformed
-      std::set<IncrementLoopInfo> WellformedIncrements;
-      std::set<std::string> Suffixes;
-      for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
-                                                 PE = Loop->getExit().pred_end();
-                                                 PI != PE; PI++) {
-        bool WellformedIncrement = false;
-        for (const IncrementInfo I : LoopVarCandidates) {
-          try {
-            const Expr *Cond = (*PI)->getTerminatorCondition();
+        std::set<std::string> Reasons;  // why the (IncrementInfo, Cond) pairs aren't wellformed
+        std::set<IncrementLoopInfo> WellformedIncrements;
+        std::set<std::string> Suffixes;
+        for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
+                                                  PE = Loop->getExit().pred_end();
+                                                  PI != PE; PI++) {
+          bool WellformedIncrement = false;
+          for (const IncrementInfo I : LoopVarCandidates) {
+            try {
+              const Expr *Cond = (*PI)->getTerminatorCondition();
 
-            // increments on each path?
-            if (Constr.IConstr == EACH_PATH) {
-              auto pair = checkBody(Loop, I);
-              if (pair.MaxAssignments > 1)
-                  throw checkerror("ASSIGNED_Twice");
-              if (pair.MinAssignments < 1)
-                  throw checkerror("ASSIGNED_NotAllPaths");
-            }
-
-            // condition well formed?
-            std::pair<std::string, VarDeclIntPair> result;
-            if (Constr.EWConstr > ANY_EXITCOND) {
-              result = checkCond(Cond, I);
-            } else {
-              result = std::make_pair("", VarDeclIntPair());
-            }
-            std::string Suffix = result.first;
-            VarDeclIntPair Bound = result.second;
-
-            // are variables in condition pseudo-const modulo increments?
-            assert((Constr.EWConstr == ANY_EXITCOND || Cond) && "SomeWellformed constraint => condition");
-            if (Cond) {
-              PseudoConstantSet.clear();
-              DefUseHelper CondDUH(Cond);
-              for (auto VD : CondDUH.getDefsAndUses()) {
-                if (VD == I.VD) continue;
-                std::string name = I.VD == Bound.Var ? "N" : (I.VD == I.Delta.Var ? "D" : "X");
-                /* std::string name = I.VD == Bound.Var ? "N" : (I.VD == I.Delta ? "D" : VD->getNameAsString()); */
-                addPseudoConstantVar(name, VD);
+              // increments on each path?
+              if (Constr.IConstr == EACH_PATH) {
+                auto pair = checkBody(Loop, I);
+                if (pair.MaxAssignments > 1)
+                    throw checkerror("ASSIGNED_Twice");
+                if (pair.MinAssignments < 1)
+                    throw checkerror("ASSIGNED_NotAllPaths");
               }
-              if (Constr.IConstr == SOME_PATH && I.Delta.Var) {
-                addPseudoConstantVar("D", I.Delta.Var);
+
+              // condition well formed?
+              std::pair<std::string, VarDeclIntPair> result;
+              if (Constr.EWConstr > ANY_EXITCOND) {
+                result = checkCond(Cond, I);
+              } else {
+                result = std::make_pair("", VarDeclIntPair());
               }
-              
-              checkPseudoConstantSet(Loop);
+              std::string Suffix = result.first;
+              VarDeclIntPair Bound = result.second;
+
+              // are variables in condition pseudo-const modulo increments?
+              assert((Constr.EWConstr == ANY_EXITCOND || Cond) && "SomeWellformed constraint => condition");
+              if (Cond) {
+                PseudoConstantSet.clear();
+                DefUseHelper CondDUH(Cond);
+                for (auto VD : CondDUH.getDefsAndUses()) {
+                  if (VD == I.VD) continue;
+                  std::string name = I.VD == Bound.Var ? "N" : (I.VD == I.Delta.Var ? "D" : "X");
+                  /* std::string name = I.VD == Bound.Var ? "N" : (I.VD == I.Delta ? "D" : VD->getNameAsString()); */
+                  addPseudoConstantVar(name, VD);
+                }
+                if (Constr.IConstr == SOME_PATH && I.Delta.Var) {
+                  addPseudoConstantVar("D", I.Delta.Var);
+                }
+                
+                checkPseudoConstantSet(Loop);
+              }
+
+              // save everything
+              IncrementLoopInfo ILI = {I.VD, I.Statement, I.Delta, Bound};
+              WellformedIncrements.insert(ILI);
+              WellformedIncrement = true;
+              Suffixes.insert(Suffix);
+
+              // one is enough
+              /* goto next_exit; */
+              // we collect (increment, bound) pairs because AmortB needs the bound
+            } catch(checkerror &e) {
+              Reasons.insert(e.what());
             }
-
-            // save everything
-            IncrementLoopInfo ILI = {I.VD, I.Statement, I.Delta, Bound};
-            WellformedIncrements.insert(ILI);
-            WellformedIncrement = true;
-            Suffixes.insert(Suffix);
-
-            // one is enough
-            /* goto next_exit; */
-            // we collect (increment, bound) pairs because AmortB needs the bound
-          } catch(checkerror &e) {
-            Reasons.insert(e.what());
           }
         }
-      }
 
-      // We found well-formed increments
-      if (WellformedIncrements.size()) {
-        std::set<const VarDecl*> Counters;
-        for (auto ILI : WellformedIncrements) {
-          Counters.insert(ILI.VD);
+        // We found well-formed increments
+        if (WellformedIncrements.size()) {
+          std::set<const VarDecl*> Counters;
+          for (auto ILI : WellformedIncrements) {
+            Counters.insert(ILI.VD);
+          }
+          const unsigned CounterSetSize = Counters.size();
+          LoopClassifier::classify(Loop, Constr.str(), Marker+"Counters", CounterSetSize);
+
+          std::stringstream Suffix;
+          for (std::set<std::string>::const_iterator I = Suffixes.begin(),
+                                                    E = Suffixes.end();
+                                                    I != E; I++) {
+            Suffix << *I;
+            if (std::next(I) != E) Suffix << "-";
+          }
+          LoopClassifier::classify(Loop, Constr.str(), Marker, Suffix.str());
+          return WellformedIncrements;
         }
-        const unsigned CounterSetSize = Counters.size();
-        LoopClassifier::classify(Loop, Constr.str(), Marker+"Counters", CounterSetSize);
 
-        std::stringstream Suffix;
-        for (std::set<std::string>::const_iterator I = Suffixes.begin(),
-                                                   E = Suffixes.end();
-                                                   I != E; I++) {
-          Suffix << *I;
-          if (std::next(I) != E) Suffix << "-";
+        // We didn't find well formed increments
+        std::stringstream Reason;
+        for (std::set<std::string>::const_iterator I = Reasons.begin(),
+                                                  E = Reasons.end();
+                                                  I != E; I++) {
+          Reason << *I;
+          if (std::next(I) != E) Reason << "-";
         }
-        LoopClassifier::classify(Loop, Constr.str(), Marker, Suffix.str());
-        return WellformedIncrements;
-      }
+        assert(Reason.str().size());
 
-      // We didn't find well formed increments
-      std::stringstream Reason;
-      for (std::set<std::string>::const_iterator I = Reasons.begin(),
-                                                 E = Reasons.end();
-                                                 I != E; I++) {
-        Reason << *I;
-        if (std::next(I) != E) Reason << "-";
-      }
-      assert(Reason.str().size());
+        LoopClassifier::classify(Loop, Constr.str(), Marker, Reason.str(), false);
 
-      LoopClassifier::classify(Loop, Constr.str(), Marker, Reason.str(), false);
+      } // POnlyProve
+
       return std::set<IncrementLoopInfo>();
     }
 };

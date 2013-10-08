@@ -548,6 +548,19 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         C->classify(isSpecified(D, LocationID), Unsliced, SlicedAllLoops, SlicedOuterLoop, OutermostNestingLoop, NestingLoops, ProperlyNestedLoops);
       }
 
+      for (auto Pair : M) {
+        auto MLD = Pair.first;
+        auto NestingLoops = MLD.NestingLoops;
+        for (const auto NestingLoop : NestingLoops) {
+          if (not LoopClassifier::hasClass(M[*NestingLoop][0], "Proved")) {
+            goto next_loop;
+          }
+        }
+        LoopClassifier::classify(Pair.second[0], "FinitePaths");
+next_loop:
+        ;
+      }
+
       // InfluencesOuter is only classified when we reach the outer loop,
       // so we have to loop once again to show all classes.
       for (auto Pair : M) {
