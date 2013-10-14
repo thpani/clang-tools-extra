@@ -65,6 +65,7 @@ class DataIterClassifier : public IncrementClassifier {
       return Result;
     }
 
+    // TODO comparison
     std::pair<std::string, VarDeclIntPair> checkCond(const Expr *Cond, const IncrementInfo Increment) const throw (checkerror) {
       if (Cond == NULL) throw checkerror("Cond_None");
       const Expr *Expression = Cond->IgnoreParenCasts();
