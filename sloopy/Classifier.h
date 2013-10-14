@@ -24,6 +24,7 @@ class Classifier {
   const ControlVarClassifier CVC;
   const ControlVarClassifier CVC2;
   const MasterIncrementClassifier MasterC;
+  const MasterProvingClassifier MasterPC;
   const AmortizedTypeAClassifier ATAC;
   const AmortizedTypeA2Classifier ATA2C;
   const AmortizedTypeBClassifier ATBC;
@@ -35,6 +36,7 @@ class Classifier {
       B("AllLoops"), B2("OuterLoop"),
       CVC("AllLoops"), CVC2("OuterLoop"),
       MasterC(Context),
+      MasterPC(Context),
       ATAC(Context), ATA2C(), ATBC(), IIOC(), WeakATAC(Context, "Weak") {}
     void classify(
         const bool isSpecified,
@@ -83,6 +85,8 @@ class Classifier {
           llvm::errs() << ")\n";
         }
       }
+      MasterPC.classify(Unsliced, SingleExit);
+      MasterPC.classify(Unsliced, StrongSingleExit);
 
       // Influence
 

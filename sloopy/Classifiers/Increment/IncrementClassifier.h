@@ -142,61 +142,6 @@ class IncrementClassifier : public LoopClassifier {
       }
     }
 
-    bool termCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
-      const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
-
-      for (auto ProvablyTerminatingBlock : ProvablyTerminatingBlocks) {
-
-        std::map<const NaturalLoopBlock *, std::pair<unsigned long, bool>> In, Out, OldOut;
-
-        // Initialize all blocks    (1) + (2)
-        for (auto Block : *L) {
-          Out[Block] = { 0, false };
-        }
-
-        // while OUT changes
-        while (Out != OldOut) {     // (3)
-          OldOut = Out;
-          // for each basic block other than entry
-          for (auto Block : *L) {   // (4)
-            if (not Block->pred_size()) {
-              continue;
-            }
-
-            // meet (propagate OUT -> IN)
-            bool meet = true;
-            unsigned long min = std::numeric_limits<unsigned long>::max();
-            for (NaturalLoopBlock::const_pred_iterator P = Block->pred_begin(),
-                                                      E = Block->pred_end();
-                                                      P != E; P++) {    // (5)
-              const NaturalLoopBlock *Pred = *P;
-              if (Pred == &L->getEntry()) continue;
-              meet = meet and Out[Pred].second;
-              min = Out[Pred].first < min ? Out[Pred].first : min;
-            }
-            In[Block] = { min, meet };
-
-            if (Block == Header) {
-              Out[Block] = { Block->succ_size() ? 1 : 0, Block == ProvablyTerminatingBlock };
-            } else {
-              // compute OUT / f_B(x)
-              /* llvm::errs() << Block->getBlockID() << ": " << min << "\n"; */
-              assert(min < std::numeric_limits<unsigned long>::max() && "overflow");
-              Out[Block] = { Block->succ_size() ? min+1 : min,
-                (min == In[Header].first and Block == ProvablyTerminatingBlock) or In[Block].second
-              };   // (6)
-            }
-          }
-        }
-
-        if (In[Header].second) {
-          return true;
-        }
-      }
-
-      return false;
-    }
-
     bool someTermCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
       const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
 
@@ -404,11 +349,10 @@ class IncrementClassifier : public LoopClassifier {
       LoopClassifier(), Marker(Marker), Context(Context) {}
     virtual ~IncrementClassifier() {}
 
-    void classifyProve(const NaturalLoop *Loop) const throw () {
+    std::pair<std::set<const NaturalLoopBlock*>, std::map<const NaturalLoopBlock*, llvm::BitVector>>
+     classifyProve(const NaturalLoop *Loop) const throw () {
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "prove"
-      if (LoopClassifier::hasClass(Loop, "Proved")) return;
-
       LoopVariableFinder Finder(this);
       const std::set<IncrementInfo> LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
       DEBUG( llvm::dbgs() << "Number of loop var candidates: " << LoopVarCandidates.size() << "\n"; );
@@ -452,8 +396,9 @@ class IncrementClassifier : public LoopClassifier {
         LoopVarCandidatesEachPath.insert(I);
       }
 
-      llvm::BitVector Assumption(LinearHelper::AssumptionSize);
       std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks;
+      std::map<const NaturalLoopBlock*, llvm::BitVector> AssumptionMap;
+      llvm::BitVector Assumption(LinearHelper::AssumptionSize);
       // find provably terminating blocks
       for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
                                                  PE = Loop->getExit().pred_end();
@@ -527,31 +472,18 @@ class IncrementClassifier : public LoopClassifier {
 
           auto A = H.getAssumptions();
           assert(Assumption.size() == A.size() and "bitvectors should be same size");
-          Assumption |= A;
+          AssumptionMap[Block] = Assumption;
           ProvablyTerminatingBlocks.insert(Block);
         }
       }
       DEBUG( llvm::dbgs() << "ProvablyTerminatingBlocks: " << ProvablyTerminatingBlocks.size() << "\n" );
 
-      // check there is a PTB on each path
-      bool Proved = termCondOnEachPath(Loop, ProvablyTerminatingBlocks);
-      LoopClassifier::classify(Loop, "Proved", Proved);
-      if (Proved) {
-        LoopClassifier::classify(Loop, "ProvedWithoutAssumptions", Assumption.none());
-        LoopClassifier::classify(Loop, "ProvedWithAssumptionWrapv", Assumption[0]);
-        LoopClassifier::classify(Loop, "ProvedWithAssumptionLeBoundNotMax", Assumption[1]);
-        LoopClassifier::classify(Loop, "ProvedWithAssumptionGeBoundNotMin", Assumption[2]);
-        LoopClassifier::classify(Loop, "ProvedWithAssumptionMNeq0", Assumption[3]);
-        LoopClassifier::classify(Loop, "ProvedWithAssumptionWrapvOrRunsInto", Assumption[4]);
-        LoopClassifier::classify(Loop, "ProvedWithAssumptionRightArrayContent", Assumption[5]);
-      }
+      return std::make_pair(ProvablyTerminatingBlocks, AssumptionMap);
 #undef DEBUG_TYPE
 #define DEBUG_TYPE ""
     }
 
     std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const throw () {
-      classifyProve(Loop);
-      
       if (not POnlyProve) {
 
         // do we have the right # of exit arcs?

@@ -3,7 +3,6 @@
 #include "Increment/Increment.h"
 
 class MasterIncrementClassifier : public LoopClassifier {
-  const ExitClassifier ExitClassifier;
   const IntegerIterClassifier IntegerIterClassifier;
   const AArrayIterClassifier AArrayIterClassifier;
   const PArrayIterClassifier PArrayIterClassifier;
@@ -16,15 +15,12 @@ class MasterIncrementClassifier : public LoopClassifier {
   }
   public:
     MasterIncrementClassifier(const ASTContext* Context) :
-      ExitClassifier(),
       IntegerIterClassifier(Context),
       AArrayIterClassifier(Context),
       PArrayIterClassifier(Context),
       DataIterClassifier(Context) {}
     std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const {
       std::set<IncrementLoopInfo> Result, CombinedSet;
-
-      ExitClassifier.classify(Loop);
 
       Result = IntegerIterClassifier.classify(Loop, Constr);
       collectIncrementSet(Result, CombinedSet);
@@ -53,3 +49,114 @@ class MasterIncrementClassifier : public LoopClassifier {
     }
 };
 
+class MasterProvingClassifier : public LoopClassifier {
+  const IntegerIterClassifier IntegerIterClassifier;
+  const AArrayIterClassifier AArrayIterClassifier;
+  const PArrayIterClassifier PArrayIterClassifier;
+  const DataIterClassifier DataIterClassifier;
+
+  void collectIncrementSet(
+      const std::pair<std::set<const NaturalLoopBlock*>, std::map<const NaturalLoopBlock*, llvm::BitVector>> &From,
+      std::set<const NaturalLoopBlock*> &ToBlocks,
+      std::map<const NaturalLoopBlock*, llvm::BitVector> &ToBV) const {
+    for (auto Block : From.first) {
+      ToBlocks.insert(Block);
+    }
+    for (auto KV : From.second) {
+      ToBV[KV.first] = KV.second;
+    }
+  }
+
+  const NaturalLoopBlock * termCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
+    const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
+
+    for (auto ProvablyTerminatingBlock : ProvablyTerminatingBlocks) {
+
+      std::map<const NaturalLoopBlock *, std::pair<unsigned long, bool>> In, Out, OldOut;
+
+      // Initialize all blocks    (1) + (2)
+      for (auto Block : *L) {
+        Out[Block] = { 0, false };
+      }
+
+      // while OUT changes
+      while (Out != OldOut) {     // (3)
+        OldOut = Out;
+        // for each basic block other than entry
+        for (auto Block : *L) {   // (4)
+          if (not Block->pred_size()) {
+            continue;
+          }
+
+          // meet (propagate OUT -> IN)
+          bool meet = true;
+          unsigned long min = std::numeric_limits<unsigned long>::max();
+          for (NaturalLoopBlock::const_pred_iterator P = Block->pred_begin(),
+                                                    E = Block->pred_end();
+                                                    P != E; P++) {    // (5)
+            const NaturalLoopBlock *Pred = *P;
+            if (Pred == &L->getEntry()) continue;
+            meet = meet and Out[Pred].second;
+            min = Out[Pred].first < min ? Out[Pred].first : min;
+          }
+          In[Block] = { min, meet };
+
+          if (Block == Header) {
+            Out[Block] = { Block->succ_size() ? 1 : 0, Block == ProvablyTerminatingBlock };
+          } else {
+            // compute OUT / f_B(x)
+            /* llvm::errs() << Block->getBlockID() << ": " << min << "\n"; */
+            assert(min < std::numeric_limits<unsigned long>::max() && "overflow");
+            Out[Block] = { Block->succ_size() ? min+1 : min,
+              (min == In[Header].first and Block == ProvablyTerminatingBlock) or In[Block].second
+            };   // (6)
+          }
+        }
+      }
+
+      if (In[Header].second) {
+        return ProvablyTerminatingBlock;
+      }
+    }
+
+    return nullptr;
+  }
+
+  public:
+    MasterProvingClassifier(const ASTContext* Context) :
+      IntegerIterClassifier(Context),
+      AArrayIterClassifier(Context),
+      PArrayIterClassifier(Context),
+      DataIterClassifier(Context) {}
+
+    void classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const {
+      std::set<const NaturalLoopBlock *> ProvablyTerminatingBlocks;
+      std::map<const NaturalLoopBlock *, llvm::BitVector> AssumptionMap;
+
+      auto Result = IntegerIterClassifier.classifyProve(Loop);
+      collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
+
+      Result = AArrayIterClassifier.classifyProve(Loop);
+      collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
+
+      Result = PArrayIterClassifier.classifyProve(Loop);
+      collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
+
+      Result = DataIterClassifier.classifyProve(Loop);
+      collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
+
+      // check there is a PTB on each path
+      const NaturalLoopBlock *Proved = termCondOnEachPath(Loop, ProvablyTerminatingBlocks);
+      LoopClassifier::classify(Loop, "Proved", Proved!=nullptr);
+      if (Proved) {
+        auto Assumption = AssumptionMap[Proved];
+        LoopClassifier::classify(Loop, "ProvedWithoutAssumptions", Assumption.none());
+        LoopClassifier::classify(Loop, "ProvedWithAssumptionWrapv", Assumption[0]);
+        LoopClassifier::classify(Loop, "ProvedWithAssumptionLeBoundNotMax", Assumption[1]);
+        LoopClassifier::classify(Loop, "ProvedWithAssumptionGeBoundNotMin", Assumption[2]);
+        LoopClassifier::classify(Loop, "ProvedWithAssumptionMNeq0", Assumption[3]);
+        LoopClassifier::classify(Loop, "ProvedWithAssumptionWrapvOrRunsInto", Assumption[4]);
+        LoopClassifier::classify(Loop, "ProvedWithAssumptionRightArrayContent", Assumption[5]);
+      }
+    }
+};
