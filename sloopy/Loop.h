@@ -13,7 +13,7 @@ namespace sloopy {
 template<class BlockT>
 bool isTransitionBlock(const BlockT *Block) {
   if (Block->begin() == Block->end() &&    // no statements
-      Block->getTerminator() == NULL && Block->getLabel() == NULL &&
+      Block->getTerminator() == nullptr && Block->getLabel() == NULL &&
       Block->succ_size() == 1) // EXIT has 0
     {
       return true;
@@ -426,7 +426,7 @@ void NaturalLoop::build(
   for (auto Current : CFGBlocks) {
     const Stmt *S =
       TrackedBlocks != NULL && TrackedBlocks->count(Current) == 0 ?
-      NULL : Current->getTerminator();
+      nullptr : Current->getTerminator();
     NaturalLoopBlock *CBlock = new NaturalLoopBlock(Current->getBlockID(), Current->getLabel(), S);
     for (auto Element : *Current) {
       auto CStmt = Element.getAs<CFGStmt>();
