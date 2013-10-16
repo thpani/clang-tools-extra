@@ -67,6 +67,45 @@ class MasterProvingClassifier : public LoopClassifier {
     }
   }
 
+  const NaturalLoopBlock * someTermCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
+    const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
+
+    std::map<const NaturalLoopBlock *, bool> In, Out, OldOut;
+
+    // Initialize all blocks    (1) + (2)
+    for (auto Block : *L) {
+      Out[Block] = ProvablyTerminatingBlocks.count(Block);
+    }
+
+    // while OUT changes
+    while (Out != OldOut) {     // (3)
+      OldOut = Out;
+      // for each basic block other than entry
+      for (auto Block : *L) {   // (4)
+
+        // meet (propagate OUT -> IN)
+        bool meet = false;
+        for (NaturalLoopBlock::const_pred_iterator P = Block->pred_begin(),
+                                                    E = Block->pred_end();
+                                                    P != E; P++) {    // (5)
+          const NaturalLoopBlock *Pred = *P;
+          meet = meet or Out[Pred];
+        }
+        In[Block] = meet;
+
+        if (Block == Header) continue;
+
+        // compute OUT / f_B(x)
+        Out[Block] = ProvablyTerminatingBlocks.count(Block) or In[Block];   // (6)
+      }
+    }
+
+    if (In[Header]) {
+      return *ProvablyTerminatingBlocks.begin();
+    }
+    return nullptr;
+  }
+
   const NaturalLoopBlock * termCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
     const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
 
@@ -133,22 +172,42 @@ class MasterProvingClassifier : public LoopClassifier {
       std::set<const NaturalLoopBlock *> ProvablyTerminatingBlocks;
       std::map<const NaturalLoopBlock *, llvm::BitVector> AssumptionMap;
 
-      auto Result = IntegerIterClassifier.classifyProve(Loop);
-      collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
+      const NaturalLoopBlock *Proved = nullptr;
+
+      if (Constr.ExitCountConstr == SINGLE_EXIT and
+          Loop->getExit().pred_size() != 1) {
+        
+        Proved = nullptr;
+
+      } else {
+
+        auto Result = IntegerIterClassifier.classifyProve(Loop, Constr.FormConstr == ASSUME_IMPLIES);
+        collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
 
       Result = AArrayIterClassifier.classifyProve(Loop);
-      collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
+        collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
 
       Result = PArrayIterClassifier.classifyProve(Loop);
-      collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
+        collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
 
       Result = DataIterClassifier.classifyProve(Loop);
-      collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
+        collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
 
-      // check there is a PTB on each path
-      const NaturalLoopBlock *Proved = termCondOnEachPath(Loop, ProvablyTerminatingBlocks);
+        switch (Constr.ControlFlowConstr) {
+          case SINGLETON:
+            Proved = termCondOnEachPath(Loop, ProvablyTerminatingBlocks);
+            break;
+          case SOME_EACH:
+            Proved = termCondOnEachPath(Loop, ProvablyTerminatingBlocks);
+            break;
+          case SOME_SOME:
+            Proved = nullptr; // TODO
+            break;
+        }
+      }
+
       LoopClassifier::classify(Loop, Constr.str(), Proved!=nullptr);
-      if (Proved) {
+      if (Proved and Constr.isSyntTerm()) {
         auto Assumption = AssumptionMap[Proved];
         LoopClassifier::classify(Loop, Constr.str()+"WithoutAssumptions", Assumption.none());
         LoopClassifier::classify(Loop, Constr.str()+"WithAssumptionWrapv", Assumption[0]);

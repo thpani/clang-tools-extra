@@ -79,9 +79,14 @@ struct SimpleLoopConstraint {
   const ControlFlowConstraint ControlFlowConstr;
   const CondFormConstraint FormConstr;
 
+  bool isSyntTerm() const {
+    return (ExitCountConstr == ANY_EXIT and
+            ControlFlowConstr == SINGLETON and
+            FormConstr == IMPLIES);
+  }
+
   std::string str() const {
-    if (ControlFlowConstr == SINGLETON and FormConstr == IMPLIES) {
-      assert(ExitCountConstr == ANY_EXIT && "why would you want to restrict termiantion proofs");
+    if (isSyntTerm()) {
       return "Proved";
     }
 
@@ -124,15 +129,16 @@ struct SimpleLoopConstraint {
 
 static const SimpleLoopConstraint SyntacticTerm = { ANY_EXIT, SINGLETON, IMPLIES };
 static const SimpleLoopConstraint AnyExitStrongCfTerminating = { ANY_EXIT, SOME_EACH, IMPLIES };
-static const SimpleLoopConstraint AnyExitWeakCfTerminating = { ANY_EXIT, SOME_EACH, IMPLIES };
+static const SimpleLoopConstraint AnyExitWeakCfTerminating = { ANY_EXIT, SOME_SOME, IMPLIES };
 static const SimpleLoopConstraint AnyExitProvedCfWellformed = { ANY_EXIT, SINGLETON, ASSUME_IMPLIES };
 static const SimpleLoopConstraint AnyExitStrongCfWellformed = { ANY_EXIT, SOME_EACH, ASSUME_IMPLIES };
-static const SimpleLoopConstraint AnyExitWeakCfWellformed = { ANY_EXIT, SOME_EACH, ASSUME_IMPLIES };
+static const SimpleLoopConstraint AnyExitWeakCfWellformed = { ANY_EXIT, SOME_SOME, ASSUME_IMPLIES };
+static const SimpleLoopConstraint SingleExitProvedCfTerminating = { SINGLE_EXIT, SINGLETON, IMPLIES };
 static const SimpleLoopConstraint SingleExitStrongCfTerminating = { SINGLE_EXIT, SOME_EACH, IMPLIES };
-static const SimpleLoopConstraint SingleExitWeakCfTerminating = { SINGLE_EXIT, SOME_EACH, IMPLIES };
+static const SimpleLoopConstraint SingleExitWeakCfTerminating = { SINGLE_EXIT, SOME_SOME, IMPLIES };
 static const SimpleLoopConstraint SingleExitProvedCfWellformed = { SINGLE_EXIT, SINGLETON, ASSUME_IMPLIES };
 static const SimpleLoopConstraint SingleExitStrongCfWellformed = { SINGLE_EXIT, SOME_EACH, ASSUME_IMPLIES };
-static const SimpleLoopConstraint SingleExitWeakCfWellformed = { SINGLE_EXIT, SOME_EACH, ASSUME_IMPLIES };
+static const SimpleLoopConstraint SingleExitWeakCfWellformed = { SINGLE_EXIT, SOME_SOME, ASSUME_IMPLIES };
 
 struct IncrementClassifierConstraint {
   const ExitsCountConstraint ECConstr;

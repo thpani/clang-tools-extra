@@ -142,42 +142,6 @@ class IncrementClassifier : public LoopClassifier {
       }
     }
 
-    bool someTermCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
-      const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
-
-      std::map<const NaturalLoopBlock *, bool> In, Out, OldOut;
-
-      // Initialize all blocks    (1) + (2)
-      for (auto Block : *L) {
-        Out[Block] = ProvablyTerminatingBlocks.count(Block);
-      }
-
-      // while OUT changes
-      while (Out != OldOut) {     // (3)
-        OldOut = Out;
-        // for each basic block other than entry
-        for (auto Block : *L) {   // (4)
-
-          // meet (propagate OUT -> IN)
-          bool meet = false;
-          for (NaturalLoopBlock::const_pred_iterator P = Block->pred_begin(),
-                                                     E = Block->pred_end();
-                                                     P != E; P++) {    // (5)
-            const NaturalLoopBlock *Pred = *P;
-            meet = meet or Out[Pred];
-          }
-          In[Block] = meet;
-
-          if (Block == Header) continue;
-
-          // compute OUT / f_B(x)
-          Out[Block] = ProvablyTerminatingBlocks.count(Block) or In[Block];   // (6)
-        }
-      }
-
-      return In[Header];
-    }
-
     struct CheckBodyResult {
       unsigned MaxAssignments;
       unsigned MinAssignments;

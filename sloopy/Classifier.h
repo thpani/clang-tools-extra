@@ -51,67 +51,73 @@ class Classifier {
       // ANY + Stmt
       ALC.classify(Unsliced);
 
-      // Simple control flow
-      SLC.classify(Unsliced);
+      if (not Psyntterm_only) {
 
-      // Branching
-      B.classify(SlicedAllLoops);
-      B2.classify(SlicedOuterLoop);
+        // Simple control flow
+        SLC.classify(Unsliced);
 
-      // ControlVars
-      CVC.classify(SlicedAllLoops);
-      CVC2.classify(SlicedOuterLoop);
+        // Branching
+        B.classify(SlicedAllLoops);
+        B2.classify(SlicedOuterLoop);
 
-      MasterC.classify(Unsliced, SingleExit);
-      MasterC.classify(Unsliced, StrongSingleExit);
-      auto IMEAC = MasterC.classify(Unsliced, MultiExit);
-      MasterC.classify(Unsliced, StrongMultiExit);
-      if (isSpecified && DumpIncrementVars) {
-        for (auto I : IMEAC) {
-          llvm::errs() << "(incr: " << I.VD->getNameAsString() << ", ";
-          llvm::errs() << "bound: ";
-          if (I.Bound.Var) {
-            llvm::errs() << I.Bound.Var->getNameAsString();
-          } else {
-            llvm::errs() << I.Bound.Int.getSExtValue();
+        // ControlVars
+        CVC.classify(SlicedAllLoops);
+        CVC2.classify(SlicedOuterLoop);
+
+        MasterC.classify(Unsliced, SingleExit);
+        MasterC.classify(Unsliced, StrongSingleExit);
+        auto IMEAC = MasterC.classify(Unsliced, MultiExit);
+        MasterC.classify(Unsliced, StrongMultiExit);
+        if (isSpecified && DumpIncrementVars) {
+          for (auto I : IMEAC) {
+            llvm::errs() << "(incr: " << I.VD->getNameAsString() << ", ";
+            llvm::errs() << "bound: ";
+            if (I.Bound.Var) {
+              llvm::errs() << I.Bound.Var->getNameAsString();
+            } else {
+              llvm::errs() << I.Bound.Int.getSExtValue();
+            }
+            llvm::errs() << ", ";
+            llvm::errs() << "delta: ";
+            if (I.Delta.Var) {
+              llvm::errs() << I.Delta.Var->getNameAsString();
+            } else {
+              llvm::errs() << I.Delta.Int.getSExtValue();
+            }
+            llvm::errs() << ")\n";
           }
-          llvm::errs() << ", ";
-          llvm::errs() << "delta: ";
-          if (I.Delta.Var) {
-            llvm::errs() << I.Delta.Var->getNameAsString();
-          } else {
-            llvm::errs() << I.Delta.Int.getSExtValue();
-          }
-          llvm::errs() << ")\n";
         }
       }
       MasterPC.classify(Unsliced, SyntacticTerm);
-      MasterPC.classify(Unsliced, AnyExitStrongCfTerminating);
-      MasterPC.classify(Unsliced, AnyExitWeakCfTerminating);
-      MasterPC.classify(Unsliced, AnyExitProvedCfWellformed);
-      MasterPC.classify(Unsliced, AnyExitStrongCfWellformed);
-      MasterPC.classify(Unsliced, AnyExitWeakCfWellformed);
-      MasterPC.classify(Unsliced, SingleExitStrongCfTerminating);
-      MasterPC.classify(Unsliced, SingleExitWeakCfTerminating);
-      MasterPC.classify(Unsliced, SingleExitProvedCfWellformed);
-      MasterPC.classify(Unsliced, SingleExitStrongCfWellformed);
-      MasterPC.classify(Unsliced, SingleExitWeakCfWellformed);
+      if (not Psyntterm_only) {
+        MasterPC.classify(Unsliced, AnyExitStrongCfTerminating);
+        MasterPC.classify(Unsliced, AnyExitWeakCfTerminating);
+        MasterPC.classify(Unsliced, AnyExitProvedCfWellformed);
+        MasterPC.classify(Unsliced, AnyExitStrongCfWellformed);
+        MasterPC.classify(Unsliced, AnyExitWeakCfWellformed);
+        MasterPC.classify(Unsliced, SingleExitProvedCfTerminating);
+        MasterPC.classify(Unsliced, SingleExitStrongCfTerminating);
+        MasterPC.classify(Unsliced, SingleExitWeakCfTerminating);
+        MasterPC.classify(Unsliced, SingleExitProvedCfWellformed);
+        MasterPC.classify(Unsliced, SingleExitStrongCfWellformed);
+        MasterPC.classify(Unsliced, SingleExitWeakCfWellformed);
 
-      // Influence
+        // Influence
 
-      if (EnableAmortized) {
-        ATA2C.classify(MasterC, Unsliced, OutermostNestingLoop, NestingLoops);
-        ATAC.classify(MasterC, MultiExit, Unsliced, OutermostNestingLoop, NestingLoops);
-        /* Make sure to pass Unsliced!!!
-        * MultiExitNoCond classifier needs the Unsliced CFG to find all increments!
-        */
-        WeakATAC.classify(MasterC, MultiExitNoCond, Unsliced, OutermostNestingLoop, NestingLoops);
-        ATBC.classify(MasterC, Unsliced, OutermostNestingLoop, NestingLoops);
+        if (EnableAmortized) {
+          ATA2C.classify(MasterC, Unsliced, OutermostNestingLoop, NestingLoops);
+          ATAC.classify(MasterC, MultiExit, Unsliced, OutermostNestingLoop, NestingLoops);
+          /* Make sure to pass Unsliced!!!
+          * MultiExitNoCond classifier needs the Unsliced CFG to find all increments!
+          */
+          WeakATAC.classify(MasterC, MultiExitNoCond, Unsliced, OutermostNestingLoop, NestingLoops);
+          ATBC.classify(MasterC, Unsliced, OutermostNestingLoop, NestingLoops);
 
-        /* Uses hasClass!!!
-        * Make sure to run this AFTER WeakAmortizedTypeAClassifier!!!
-        */
-        IIOC.classify(ProperlyNestedLoops, Unsliced);
+          /* Uses hasClass!!!
+          * Make sure to run this AFTER WeakAmortizedTypeAClassifier!!!
+          */
+          IIOC.classify(ProperlyNestedLoops, Unsliced);
+        }
       }
 
       LoopClassifier::classify(Unsliced, "Time", (int)(now()-Begin));
