@@ -201,7 +201,7 @@ class MasterProvingClassifier : public LoopClassifier {
             Proved = termCondOnEachPath(Loop, ProvablyTerminatingBlocks);
             break;
           case SOME_SOME:
-            Proved = nullptr; // TODO
+            Proved = ProvablyTerminatingBlocks.size() ? *ProvablyTerminatingBlocks.begin() : nullptr;
             break;
         }
       }
