@@ -63,6 +63,25 @@ enum IncrementsConstraint {
   EACH_PATH
 };
 
+enum CondFormConstraint {
+  IMPLIES,
+  ASSUME_IMPLIES
+};
+
+enum ControlFlowConstraint {
+  SINGLETON,
+  SOME_EACH,
+  SOME_SOME
+};
+
+struct SimpleLoopConstraint {
+  const ExitsCountConstraint ExitCountConstr;
+  const CondFormConstraint FormConstr;
+  const ControlFlowConstraint ControlFlowConstr;
+};
+
+static const SimpleLoopConstraint SyntacticTerm = { ANY_EXIT, IMPLIES, SINGLETON };
+
 struct IncrementClassifierConstraint {
   const ExitsCountConstraint ECConstr;
   const ExitsWellformedConstraint EWConstr;

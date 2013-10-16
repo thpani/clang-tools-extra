@@ -85,8 +85,7 @@ class Classifier {
           llvm::errs() << ")\n";
         }
       }
-      MasterPC.classify(Unsliced, SingleExit);
-      MasterPC.classify(Unsliced, StrongSingleExit);
+      MasterPC.classify(Unsliced, SyntacticTerm);
 
       // Influence
 

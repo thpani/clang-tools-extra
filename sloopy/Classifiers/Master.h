@@ -129,7 +129,7 @@ class MasterProvingClassifier : public LoopClassifier {
       PArrayIterClassifier(Context),
       DataIterClassifier(Context) {}
 
-    void classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const {
+    void classify(const NaturalLoop *Loop, const SimpleLoopConstraint Constr) const {
       std::set<const NaturalLoopBlock *> ProvablyTerminatingBlocks;
       std::map<const NaturalLoopBlock *, llvm::BitVector> AssumptionMap;
 
