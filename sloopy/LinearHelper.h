@@ -551,14 +551,14 @@ namespace sloopy {
       }
 
       /* Check if X is linear in A, not in B, and will run into B given dir. */
-      bool dropsToZero(const z3::expr &X, const IncrementSet Increments, const Z3_decl_kind DeclKind, const z3::expr &A, const z3::expr &B) {
+      bool dropsToZero(const z3::expr &X, const IncrementSet Increments, const Z3_decl_kind DeclKind, const z3::expr &A, const z3::expr &B, const bool assumeImplies) {
         auto Pair = isLinearIn(X, A);
         Monotonicity Mon = Pair.first;
         machine_int m = Pair.second;
 
         if (containsX(X,B)) return false;
 
-        if (Z3_OP_EQ == DeclKind and not anyUnknown(Increments) and not anyZero(Increments)) {
+        if (Z3_OP_EQ == DeclKind and (assumeImplies or (not anyUnknown(Increments) and not anyZero(Increments)))) {
           if (Mon == StrictIncreasing or
               Mon == StrictDecreasing or
               Mon == UnknownDirection or
@@ -572,7 +572,7 @@ namespace sloopy {
           }
         }
 
-        if (Z3_OP_DISTINCT == DeclKind and singletonOne(Increments)) {
+        if (Z3_OP_DISTINCT == DeclKind and (assumeImplies or singletonOne(Increments))) {
           if ((Mon == StrictIncreasing and ((B.is_numeral() and as_int(B) == 0) or m == 1)) or
               (Mon == StrictDecreasing and ((B.is_numeral() and as_int(B) == 0) or m == -1)) or
               Mon == UnknownContent) {
@@ -586,7 +586,7 @@ namespace sloopy {
         }
 
         if (Z3_OP_LE <= DeclKind and DeclKind <= Z3_OP_GT and
-            (allLtZero(Increments) or allGtZero(Increments))) {
+            (assumeImplies or (allLtZero(Increments) or allGtZero(Increments)))) {
           if (Mon == StrictIncreasing or
               Mon == StrictDecreasing or
               Mon == UnknownDirection or
@@ -600,7 +600,8 @@ namespace sloopy {
               case Z3_OP_LE:
                 AssumeLeBoundLtMaxVal = true;
               case Z3_OP_LT:
-                if ((Mon == StrictIncreasing and allGtZero(Increments)) or
+                if (assumeImplies or
+                    (Mon == StrictIncreasing and allGtZero(Increments)) or
                     (Mon == StrictDecreasing and allLtZero(Increments)) or
                     AssumeRightArrayContent) {
                   return true;
@@ -611,7 +612,8 @@ namespace sloopy {
               case Z3_OP_GE:
                 AssumeGeBoundGtMinVal = true;
               case Z3_OP_GT:
-                if ((Mon == StrictIncreasing and allLtZero(Increments)) or
+                if (assumeImplies or
+                    (Mon == StrictIncreasing and allLtZero(Increments)) or
                     (Mon == StrictDecreasing and allGtZero(Increments)) or
                     AssumeRightArrayContent) {
                   return true;
@@ -628,7 +630,7 @@ namespace sloopy {
         return false;
       }
 
-      bool dropsToZero(const z3::expr &X, const z3::expr &E, const IncrementSet Increments) {
+      bool dropsToZero(const z3::expr &X, const z3::expr &E, const IncrementSet Increments, const bool assumeImplies) {
         z3::expr S = E;
 
         /* linear expression */
@@ -647,9 +649,9 @@ namespace sloopy {
             Z3_ast (*mk_func) (Z3_context, Z3_ast, Z3_ast);
             switch (ChildDeclKind) {
               case Z3_OP_EQ:
-                return dropsToZero(X, S.arg(0).arg(0) != S.arg(0).arg(1), Increments);
+                return dropsToZero(X, S.arg(0).arg(0) != S.arg(0).arg(1), Increments, assumeImplies);
               case Z3_OP_DISTINCT:
-                return dropsToZero(X, S.arg(0).arg(0) == S.arg(0).arg(1), Increments);
+                return dropsToZero(X, S.arg(0).arg(0) == S.arg(0).arg(1), Increments, assumeImplies);
               case Z3_OP_LE:
                 mk_func = Z3_mk_gt;
                 break;
@@ -663,12 +665,12 @@ namespace sloopy {
                 mk_func = Z3_mk_le;
                 break;
               case Z3_OP_NOT:
-                return dropsToZero(X, S.arg(0).arg(0), Increments);
+                return dropsToZero(X, S.arg(0).arg(0), Increments, assumeImplies);
               default:
                 llvm_unreachable("unhandled decl kind");
             }
             Z3_ast r = mk_func(S.ctx(), S.arg(0).arg(0), S.arg(0).arg(1));
-            return dropsToZero(X, z3::expr(S.ctx(), r), Increments);
+            return dropsToZero(X, z3::expr(S.ctx(), r), Increments, assumeImplies);
           }
         }
 
@@ -683,7 +685,7 @@ namespace sloopy {
 
         z3::expr lhs = S.arg(0);
         z3::expr rhs = S.arg(1);
-        if (dropsToZero(X, Increments, DeclKind, lhs, rhs))
+        if (dropsToZero(X, Increments, DeclKind, lhs, rhs, assumeImplies))
           return true;
         switch (DeclKind) {
           case Z3_OP_LE:
@@ -704,7 +706,7 @@ namespace sloopy {
           default:
             llvm_unreachable("unhandled decl kind");
         }
-        if (dropsToZero(X, Increments, DeclKind, rhs, lhs))
+        if (dropsToZero(X, Increments, DeclKind, rhs, lhs, assumeImplies))
           return true;
 
         return false;
@@ -727,7 +729,7 @@ namespace sloopy {
         }
       }
 
-      bool dropsToZero(const VarDecl *X, const Expr *E, const IncrementSet Increments, const bool negate=false) {
+      bool dropsToZero(const VarDecl *X, const Expr *E, const IncrementSet Increments, const bool negate, const bool assumeImplies) {
         Z3Converter Z3C;
         try {
           z3::expr z3E = Z3C.Run(E);
@@ -741,7 +743,7 @@ namespace sloopy {
           try {
             z3::expr z3X = Z3C.exprFor(X);
             Constants = Z3C.getConstants();
-            bool Result = dropsToZero(z3X, z3E, Increments);
+            bool Result = dropsToZero(z3X, z3E, Increments, assumeImplies);
             for (auto expr : Z3AssumeWrapv) {
               AssumeWrapv.insert(Z3C.exprFor(*expr));
             }

@@ -314,7 +314,7 @@ class IncrementClassifier : public LoopClassifier {
     virtual ~IncrementClassifier() {}
 
     std::pair<std::set<const NaturalLoopBlock*>, std::map<const NaturalLoopBlock*, llvm::BitVector>>
-     classifyProve(const NaturalLoop *Loop) const throw () {
+     classifyProve(const NaturalLoop *Loop, const bool assumeImplies = false) const throw () {
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "prove"
       LoopVariableFinder Finder(this);
@@ -408,12 +408,12 @@ class IncrementClassifier : public LoopClassifier {
           // see if we can find a proof
           if (whichBranch == 1) {
             // cond needs to become false to exit the loop
-            if (not H.dropsToZero(I.VD, Cond, MaxMin.AccumulatedIncrement)) {
+            if (not H.dropsToZero(I.VD, Cond, MaxMin.AccumulatedIncrement, false, assumeImplies)) {
               continue;
             }
           } else if (whichBranch == 0) {
             // cond needs to become true to exit the loop
-            if (not H.dropsToZero(I.VD, Cond, MaxMin.AccumulatedIncrement, true)) {
+            if (not H.dropsToZero(I.VD, Cond, MaxMin.AccumulatedIncrement, true, assumeImplies)) {
               continue;
             }
           } else {
