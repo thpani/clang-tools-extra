@@ -484,8 +484,6 @@ class IncrementClassifier : public LoopClassifier {
     }
 
     std::set<IncrementLoopInfo> classify(const NaturalLoop *Loop, const IncrementClassifierConstraint Constr) const throw () {
-      if (not POnlyProve) {
-
         // do we have the right # of exit arcs?
         unsigned PredSize = Loop->getExit().pred_size();
         if (Constr.ECConstr != ANY_EXIT && PredSize != Constr.ECConstr) {
@@ -599,8 +597,6 @@ class IncrementClassifier : public LoopClassifier {
         assert(Reason.str().size());
 
         LoopClassifier::classify(Loop, Constr.str(), Marker, Reason.str(), false);
-
-      } // POnlyProve
 
       return std::set<IncrementLoopInfo>();
     }

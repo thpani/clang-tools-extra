@@ -86,6 +86,16 @@ class Classifier {
         }
       }
       MasterPC.classify(Unsliced, SyntacticTerm);
+      MasterPC.classify(Unsliced, AnyExitStrongCfTerminating);
+      MasterPC.classify(Unsliced, AnyExitWeakCfTerminating);
+      MasterPC.classify(Unsliced, AnyExitProvedCfWellformed);
+      MasterPC.classify(Unsliced, AnyExitStrongCfWellformed);
+      MasterPC.classify(Unsliced, AnyExitWeakCfWellformed);
+      MasterPC.classify(Unsliced, SingleExitStrongCfTerminating);
+      MasterPC.classify(Unsliced, SingleExitWeakCfTerminating);
+      MasterPC.classify(Unsliced, SingleExitProvedCfWellformed);
+      MasterPC.classify(Unsliced, SingleExitStrongCfWellformed);
+      MasterPC.classify(Unsliced, SingleExitWeakCfWellformed);
 
       // Influence
 

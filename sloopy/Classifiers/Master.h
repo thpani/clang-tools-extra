@@ -147,16 +147,16 @@ class MasterProvingClassifier : public LoopClassifier {
 
       // check there is a PTB on each path
       const NaturalLoopBlock *Proved = termCondOnEachPath(Loop, ProvablyTerminatingBlocks);
-      LoopClassifier::classify(Loop, "Proved", Proved!=nullptr);
+      LoopClassifier::classify(Loop, Constr.str(), Proved!=nullptr);
       if (Proved) {
         auto Assumption = AssumptionMap[Proved];
-        LoopClassifier::classify(Loop, "ProvedWithoutAssumptions", Assumption.none());
-        LoopClassifier::classify(Loop, "ProvedWithAssumptionWrapv", Assumption[0]);
-        LoopClassifier::classify(Loop, "ProvedWithAssumptionLeBoundNotMax", Assumption[1]);
-        LoopClassifier::classify(Loop, "ProvedWithAssumptionGeBoundNotMin", Assumption[2]);
-        LoopClassifier::classify(Loop, "ProvedWithAssumptionMNeq0", Assumption[3]);
-        LoopClassifier::classify(Loop, "ProvedWithAssumptionWrapvOrRunsInto", Assumption[4]);
-        LoopClassifier::classify(Loop, "ProvedWithAssumptionRightArrayContent", Assumption[5]);
+        LoopClassifier::classify(Loop, Constr.str()+"WithoutAssumptions", Assumption.none());
+        LoopClassifier::classify(Loop, Constr.str()+"WithAssumptionWrapv", Assumption[0]);
+        LoopClassifier::classify(Loop, Constr.str()+"WithAssumptionLeBoundNotMax", Assumption[1]);
+        LoopClassifier::classify(Loop, Constr.str()+"WithAssumptionGeBoundNotMin", Assumption[2]);
+        LoopClassifier::classify(Loop, Constr.str()+"WithAssumptionMNeq0", Assumption[3]);
+        LoopClassifier::classify(Loop, Constr.str()+"WithAssumptionWrapvOrRunsInto", Assumption[4]);
+        LoopClassifier::classify(Loop, Constr.str()+"WithAssumptionRightArrayContent", Assumption[5]);
       }
     }
 };
