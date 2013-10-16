@@ -84,12 +84,12 @@ class MasterProvingClassifier : public LoopClassifier {
       for (auto Block : *L) {   // (4)
 
         // meet (propagate OUT -> IN)
-        bool meet = false;
+        bool meet = true;
         for (NaturalLoopBlock::const_pred_iterator P = Block->pred_begin(),
                                                     E = Block->pred_end();
                                                     P != E; P++) {    // (5)
           const NaturalLoopBlock *Pred = *P;
-          meet = meet or Out[Pred];
+          meet = meet and Out[Pred];
         }
         In[Block] = meet;
 
@@ -106,7 +106,7 @@ class MasterProvingClassifier : public LoopClassifier {
     return nullptr;
   }
 
-  const NaturalLoopBlock * termCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
+  const NaturalLoopBlock * singleTermCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
     const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
 
     for (auto ProvablyTerminatingBlock : ProvablyTerminatingBlocks) {
@@ -195,10 +195,10 @@ class MasterProvingClassifier : public LoopClassifier {
 
         switch (Constr.ControlFlowConstr) {
           case SINGLETON:
-            Proved = termCondOnEachPath(Loop, ProvablyTerminatingBlocks);
+            Proved = singleTermCondOnEachPath(Loop, ProvablyTerminatingBlocks);
             break;
           case SOME_EACH:
-            Proved = termCondOnEachPath(Loop, ProvablyTerminatingBlocks);
+            Proved = someTermCondOnEachPath(Loop, ProvablyTerminatingBlocks);
             break;
           case SOME_SOME:
             Proved = ProvablyTerminatingBlocks.size() ? *ProvablyTerminatingBlocks.begin() : nullptr;
