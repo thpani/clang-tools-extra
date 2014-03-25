@@ -346,7 +346,7 @@ namespace sloopy {
       }
 
       z3::expr VisitIntegerLiteral(const IntegerLiteral *L) {
-        return Ctx->int_val(L->getValue().getSExtValue());
+        return Ctx->int_val((__int64)L->getValue().getSExtValue());
       }
 
       z3::expr VisitCharacterLiteral(const CharacterLiteral *L) {
