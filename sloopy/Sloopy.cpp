@@ -52,7 +52,10 @@ int main(int argc, const char **argv) {
 
   // print statistics
   if (LoopStats) {
-    llvm::errs() << "Preparing statistics...\n";
+    DEBUG(llvm::dbgs() << "Preparing statistics...\n");
+    if (!::llvm::DebugFlag) {
+      llvm::errs() << ".";
+    }
     std::string Filename("classifications_"+BenchName+".txt");
     std::string ErrorInfo;
     raw_fd_ostream ostream(Filename.c_str(), ErrorInfo);
