@@ -56,7 +56,7 @@ int main(int argc, const char **argv) {
     if (!::llvm::DebugFlag) {
       llvm::errs() << ".";
     }
-    std::string Filename("classifications_"+BenchName+".txt");
+    std::string Filename(BenchName+".json");
     std::string ErrorInfo;
     raw_fd_ostream ostream(Filename.c_str(), ErrorInfo);
     dumpClasses(ostream, OutputFormat::JSON);
