@@ -29,6 +29,40 @@ class checkerror {
  *       )
  */
 
+//#define NUM_PROCS 5
+#ifdef NUM_PROCS
+class ProcessCounter {
+  unsigned number_active = 0;
+  std::condition_variable cv;
+
+  template< class Predicate >
+  void wait_while(Predicate Pred) {
+    int status;
+    while (Pred()) {
+      wait(&status);
+      if WIFEXITED(status) {
+        --number_active;
+      }
+    }
+  }
+
+  public:
+  void wait_alldone() {
+    wait_while([this]{return number_active > 0;});
+  }
+  void wait_pool() {
+    wait_while([this]{return number_active >= NUM_PROCS;});
+    number_active++;
+  }
+};
+
+std::mutex ClassificationsMutex;
+ProcessCounter ProcCounter;
+#define LOCK_GUARD std::lock_guard<std::mutex> guard(ClassificationsMutex);
+#else
+#define LOCK_GUARD
+#endif
+
 typedef std::map<std::string, boost::variant<int, unsigned, std::string>> IncrementClassificationValue;
 typedef boost::variant<int, unsigned, std::string, IncrementClassificationValue> ClassificationValue;
 typedef std::map<std::string, ClassificationValue> ClassificationProperty;
@@ -116,19 +150,23 @@ void dumpClasses(llvm::raw_ostream &out, const OutputFormat OF = OutputFormat::J
   if (OF == OutputFormat::JSON) out << "]\n";
 }
 
+
 class LoopClassifier {
   public:
     static void classify(const NaturalLoop* Loop, const std::string Property) {
+      LOCK_GUARD
       Classifications[Loop->getUnsliced()][Property] = 1;
     }
     template<typename T>
     static void classify(const NaturalLoop* Loop, const std::string Property, const T Value) {
+      LOCK_GUARD
       Classifications[Loop->getUnsliced()][Property] = Value;
     }
     static void classify(const NaturalLoop* Loop, const std::string SubClass, const std::string Property, const std::string Value, const bool Success=true) {
       std::stringstream sstm;
       sstm << (Success ? "" : "!");
       sstm << Value;
+      LOCK_GUARD
       auto &C = Classifications[Loop->getUnsliced()];
       if (C.find(SubClass) == C.end()) {
         C[SubClass] = IncrementClassificationValue();
@@ -138,6 +176,7 @@ class LoopClassifier {
     }
     template<typename T>
     static void classify(const NaturalLoop* Loop, const std::string SubClass, const std::string Property, const T Value) {
+      LOCK_GUARD
       auto &C = Classifications[Loop->getUnsliced()];
       if (C.find(SubClass) == C.end()) {
         C[SubClass] = IncrementClassificationValue();
@@ -146,6 +185,7 @@ class LoopClassifier {
       ICV[Property] = Value;
     }
     static bool hasClass(const NaturalLoop* Loop, const std::string Property) {
+      LOCK_GUARD
       auto C = Classifications[Loop->getUnsliced()][Property];
       int I = boost::get<int>(C);
       return I;

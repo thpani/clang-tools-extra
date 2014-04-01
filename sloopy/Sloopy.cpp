@@ -1,6 +1,7 @@
 #include "iostream"
 #include "fstream"
 #include "algorithm"
+#include "thread"
 
 #include "boost/variant.hpp"
 
@@ -49,6 +50,10 @@ int main(int argc, const char **argv) {
   // run
   unsigned ret = Tool.run(newFrontendActionFactory(&Finder));
   /* we continue even if sloopy failed on some file */
+
+#ifdef NUM_PROCS
+  ProcCounter.wait_alldone();
+#endif
 
   // print statistics
   if (LoopStats) {

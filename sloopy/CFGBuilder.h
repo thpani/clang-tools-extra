@@ -358,6 +358,22 @@ class FunctionCallback : public MatchFinder::MatchCallback {
       if (!D->hasBody()) return;
       if (Function != "" and D->getNameAsString() != Function) return;
 
+#ifdef NUM_PROCS
+      // wait for a place in the process pool
+      ProcCounter.wait_pool();
+      // then fork
+      pid_t pid = fork();
+      if (pid == -1) {
+        llvm::errs() << "can't fork, error " << errno << "\n";
+        exit(EXIT_FAILURE);
+      } else if (pid == 0) {
+        // child
+      } else {
+        // parent
+        return;
+      }
+#endif
+
       DEBUG(
           llvm::dbgs() << "Processing: " << Result.SourceManager->getPresumedLoc(D->getLocation()).getFilename() << " " << D->getNameAsString() << "\n";
           llvm::dbgs().flush();
@@ -608,5 +624,9 @@ next_loop:
         delete SlicedAllLoops;
         delete SlicedOuterLoop;
       }
+
+#ifdef NUM_PROCS
+      _exit(0);  /* Note that we do not use exit() */
+#endif
     }
 };
