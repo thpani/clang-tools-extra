@@ -67,6 +67,20 @@ class MasterProvingClassifier : public LoopClassifier {
     }
   }
 
+  bool hasMultipleSuccsInLoop(const NaturalLoop *L, const NaturalLoopBlock* Block) const throw () {
+    unsigned short succsInLoop = 0;
+    for (NaturalLoopBlock::const_succ_iterator S = Block->succ_begin(),
+                                               E = Block->succ_end();
+                                               S != E; S++) {
+      const NaturalLoopBlock *Succ = *S;
+      if (Succ != &L->getExit()) {
+        succsInLoop++;
+        if (succsInLoop >= 2) return true;
+      }
+    }
+    return false;
+  }
+
   const NaturalLoopBlock * someTermCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
     const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
 
@@ -134,8 +148,8 @@ class MasterProvingClassifier : public LoopClassifier {
           bool meet = true;
           unsigned long min = std::numeric_limits<unsigned long>::max();
           for (NaturalLoopBlock::const_pred_iterator P = Block->pred_begin(),
-                                                    E = Block->pred_end();
-                                                    P != E; P++) {    // (5)
+                                                     E = Block->pred_end();
+                                                     P != E; P++) {    // (5)
             const NaturalLoopBlock *Pred = *P;
             if (Pred == &L->getEntry()) continue;
             meet = meet and Out[Pred].second;
@@ -144,13 +158,13 @@ class MasterProvingClassifier : public LoopClassifier {
           In[Block] = { min, meet };
 
           if (Block == Header) {
-            Out[Block] = { Block->succ_size() ? 1 : 0, Block == ProvablyTerminatingBlock };
+            Out[Block] = { hasMultipleSuccsInLoop(L, Block) ? 1 : 0, Block == ProvablyTerminatingBlock };
           } else {
             // compute OUT / f_B(x)
-            /* llvm::errs() << Block->getBlockID() << ": " << min << "\n"; */
             assert(min < std::numeric_limits<unsigned long>::max() && "overflow");
-            Out[Block] = { Block->succ_size() ? min+1 : min,
-              (min == In[Header].first and Block == ProvablyTerminatingBlock) or In[Block].second
+            Out[Block] = {
+              hasMultipleSuccsInLoop(L, Block) ? min+1 : min,
+              (min == Out[Header].first and Block == ProvablyTerminatingBlock) or In[Block].second
             };   // (6)
           }
           DEBUG_WITH_TYPE("provecf", llvm::dbgs() << "\t\tIn[" << Block->getBlockID() << "] = " << In[Block].first << ", " << In[Block].second << "\n");
