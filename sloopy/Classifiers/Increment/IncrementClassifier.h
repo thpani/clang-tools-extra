@@ -319,6 +319,7 @@ class IncrementClassifier : public LoopClassifier {
 #define DEBUG_TYPE "prove"
       LoopVariableFinder Finder(this);
       const std::set<IncrementInfo> LoopVarCandidates = Finder.findLoopVarCandidates(Loop);
+      DEBUG( llvm::dbgs() << "=== classifyProve ===\n");
       DEBUG( llvm::dbgs() << "Number of loop var candidates: " << LoopVarCandidates.size() << "\n"; );
 
       InvariantVarFinder F(Loop);
@@ -393,16 +394,16 @@ class IncrementClassifier : public LoopClassifier {
         assert(foundExit);
         assert(0 <= whichBranch and whichBranch <= 1);
         DEBUG( 
-            llvm::dbgs() << "Trying to prove condition\n";
+            llvm::dbgs() << "Trying to prove\n\tcondition ";
             Cond->printPretty(llvm::dbgs(), NULL, PrintingPolicy(LangOptions())); llvm::dbgs() << "\n";
-            llvm::dbgs() << "on branch: " << (not whichBranch) << "\n"
-                         << "for " << LoopVarCandidatesEachPath.size() << " candidate variables.\n";
+            llvm::dbgs() << "\ton branch " << (not whichBranch) << "\n"
+                         << "\tfor " << LoopVarCandidatesEachPath.size() << " candidate variables.\n";
         );
         for (const IncrementInfo I : LoopVarCandidatesEachPath) {
           LinearHelper H;
 
           auto MaxMin = checkBody(Loop, I);
-          DEBUG( llvm::dbgs() << I.VD->getNameAsString() << " IncrementSize: " << MaxMin.AccumulatedIncrement.size() << "\n" );
+          DEBUG( llvm::dbgs() << "\t- " << I.VD->getNameAsString() << " IncrementSize: " << MaxMin.AccumulatedIncrement.size() << "\n" );
 
           // see if we can find a proof
           if (whichBranch == 1) {
@@ -426,7 +427,7 @@ class IncrementClassifier : public LoopClassifier {
               if (VD == I.VD) continue;
               AllVarsConst = AllVarsConst and F.isInvariant(VD);
               if (!AllVarsConst) {
-                DEBUG( llvm::dbgs() << VD->getNameAsString() << " is not const\n" );
+                DEBUG( llvm::dbgs() << "\t" << VD->getNameAsString() << " is not const\n" );
                 break;
               }
             }
@@ -438,9 +439,10 @@ class IncrementClassifier : public LoopClassifier {
           auto A = H.getAssumptions();
           AssumptionMap[Block] = A;
           ProvablyTerminatingBlocks.insert(Block);
+          DEBUG( llvm::dbgs() << "\tblock " << Block->getBlockID() << " is provably terminating\n" );
         }
       }
-      DEBUG( llvm::dbgs() << "ProvablyTerminatingBlocks: " << ProvablyTerminatingBlocks.size() << "\n" );
+      DEBUG( llvm::dbgs() << "|ProvablyTerminatingBlocks| = " << ProvablyTerminatingBlocks.size() << "\n" );
 
       return std::make_pair(ProvablyTerminatingBlocks, AssumptionMap);
 #undef DEBUG_TYPE

@@ -108,8 +108,10 @@ class MasterProvingClassifier : public LoopClassifier {
 
   const NaturalLoopBlock * singleTermCondOnEachPath(const NaturalLoop *L, std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks) const throw () {
     const NaturalLoopBlock *Header = *L->getEntry().succ_begin();
+    DEBUG_WITH_TYPE("provecf", llvm::dbgs() << "Check singleTermCondOnEachPath, Header = " << Header->getBlockID() << "\n");
 
     for (auto ProvablyTerminatingBlock : ProvablyTerminatingBlocks) {
+      DEBUG_WITH_TYPE("provecf", llvm::dbgs() << "Check for provably terminating block " << ProvablyTerminatingBlock->getBlockID() << "\n");
 
       std::map<const NaturalLoopBlock *, std::pair<unsigned long, bool>> In, Out, OldOut;
 
@@ -120,6 +122,7 @@ class MasterProvingClassifier : public LoopClassifier {
 
       // while OUT changes
       while (Out != OldOut) {     // (3)
+        DEBUG_WITH_TYPE("provecf", llvm::dbgs() << "\t--- new fixed point round\n");
         OldOut = Out;
         // for each basic block other than entry
         for (auto Block : *L) {   // (4)
@@ -150,6 +153,8 @@ class MasterProvingClassifier : public LoopClassifier {
               (min == In[Header].first and Block == ProvablyTerminatingBlock) or In[Block].second
             };   // (6)
           }
+          DEBUG_WITH_TYPE("provecf", llvm::dbgs() << "\t\tIn[" << Block->getBlockID() << "] = " << In[Block].first << ", " << In[Block].second << "\n");
+          DEBUG_WITH_TYPE("provecf", llvm::dbgs() << "\t\tOut[" << Block->getBlockID() << "] = " << Out[Block].first << ", " << Out[Block].second << "\n");
         }
       }
 
@@ -174,6 +179,8 @@ class MasterProvingClassifier : public LoopClassifier {
 
       const NaturalLoopBlock *Proved = nullptr;
 
+      DEBUG_WITH_TYPE("prove", llvm::dbgs() << "=== MasterProvingClassifier for constraint " << Constr.str() << "\n");
+
       if (Constr.ExitCountConstr == SINGLE_EXIT and
           Loop->getExit().pred_size() != 1) {
         
@@ -193,6 +200,8 @@ class MasterProvingClassifier : public LoopClassifier {
         Result = DataIterClassifier.classifyProve(Loop, Constr.FormConstr == ASSUME_IMPLIES, Constr.InvariantConstr == INVARIANT);
         collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
 
+        DEBUG_WITH_TYPE("prove", llvm::dbgs() << "ALL |ProvablyTerminatingBlocks| = " << ProvablyTerminatingBlocks.size() << "\n");
+
         switch (Constr.ControlFlowConstr) {
           case SINGLETON:
             Proved = singleTermCondOnEachPath(Loop, ProvablyTerminatingBlocks);
@@ -205,6 +214,7 @@ class MasterProvingClassifier : public LoopClassifier {
             break;
         }
       }
+      DEBUG_WITH_TYPE("prove", llvm::dbgs() << "Control flow constraint: " << (Proved!=nullptr ? "ok" : "failed") << "\n");
 
       LoopClassifier::classify(Loop, Constr.str(), Proved!=nullptr);
       if (Proved and Constr.isSyntTerm()) {
