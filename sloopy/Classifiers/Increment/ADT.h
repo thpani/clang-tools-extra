@@ -74,15 +74,22 @@ enum ControlFlowConstraint {
   SOME_SOME
 };
 
+enum InvariantConstraint {
+  MAYBE_INVARIANT,
+  INVARIANT
+};
+
 struct SimpleLoopConstraint {
   const ExitsCountConstraint ExitCountConstr;
   const ControlFlowConstraint ControlFlowConstr;
   const CondFormConstraint FormConstr;
+  const InvariantConstraint InvariantConstr;
 
   bool isSyntTerm() const {
     return (ExitCountConstr == ANY_EXIT and
             ControlFlowConstr == SINGLETON and
-            FormConstr == IMPLIES);
+            FormConstr == IMPLIES and
+            InvariantConstr == INVARIANT);
   }
 
   std::string str() const {
@@ -113,6 +120,14 @@ struct SimpleLoopConstraint {
         break;
     }
 
+    switch (InvariantConstr) {
+      case MAYBE_INVARIANT:
+        break;
+      case INVARIANT:
+        Result << "Invariant";
+        break;
+    }
+
     switch(FormConstr) {
       case IMPLIES:
         Result << "Terminating";
@@ -127,18 +142,31 @@ struct SimpleLoopConstraint {
 
 };
 
-static const SimpleLoopConstraint SyntacticTerm = { ANY_EXIT, SINGLETON, IMPLIES };
-static const SimpleLoopConstraint AnyExitStrongCfTerminating = { ANY_EXIT, SOME_EACH, IMPLIES };
-static const SimpleLoopConstraint AnyExitWeakCfTerminating = { ANY_EXIT, SOME_SOME, IMPLIES };
-static const SimpleLoopConstraint AnyExitProvedCfWellformed = { ANY_EXIT, SINGLETON, ASSUME_IMPLIES };
-static const SimpleLoopConstraint AnyExitStrongCfWellformed = { ANY_EXIT, SOME_EACH, ASSUME_IMPLIES };
-static const SimpleLoopConstraint AnyExitWeakCfWellformed = { ANY_EXIT, SOME_SOME, ASSUME_IMPLIES };
-static const SimpleLoopConstraint SingleExitProvedCfTerminating = { SINGLE_EXIT, SINGLETON, IMPLIES };
-static const SimpleLoopConstraint SingleExitStrongCfTerminating = { SINGLE_EXIT, SOME_EACH, IMPLIES };
-static const SimpleLoopConstraint SingleExitWeakCfTerminating = { SINGLE_EXIT, SOME_SOME, IMPLIES };
-static const SimpleLoopConstraint SingleExitProvedCfWellformed = { SINGLE_EXIT, SINGLETON, ASSUME_IMPLIES };
-static const SimpleLoopConstraint SingleExitStrongCfWellformed = { SINGLE_EXIT, SOME_EACH, ASSUME_IMPLIES };
-static const SimpleLoopConstraint SingleExitWeakCfWellformed = { SINGLE_EXIT, SOME_SOME, ASSUME_IMPLIES };
+static const SimpleLoopConstraint AnyExitProvedCfTerminating = { ANY_EXIT, SINGLETON, IMPLIES, MAYBE_INVARIANT };
+static const SimpleLoopConstraint AnyExitStrongCfTerminating = { ANY_EXIT, SOME_EACH, IMPLIES, MAYBE_INVARIANT };
+static const SimpleLoopConstraint AnyExitWeakCfTerminating = { ANY_EXIT, SOME_SOME, IMPLIES, MAYBE_INVARIANT };
+static const SimpleLoopConstraint AnyExitProvedCfWellformed = { ANY_EXIT, SINGLETON, ASSUME_IMPLIES, MAYBE_INVARIANT };
+static const SimpleLoopConstraint AnyExitStrongCfWellformed = { ANY_EXIT, SOME_EACH, ASSUME_IMPLIES, MAYBE_INVARIANT };
+static const SimpleLoopConstraint AnyExitWeakCfWellformed = { ANY_EXIT, SOME_SOME, ASSUME_IMPLIES, MAYBE_INVARIANT };
+static const SimpleLoopConstraint SingleExitProvedCfTerminating = { SINGLE_EXIT, SINGLETON, IMPLIES, MAYBE_INVARIANT };
+static const SimpleLoopConstraint SingleExitStrongCfTerminating = { SINGLE_EXIT, SOME_EACH, IMPLIES, MAYBE_INVARIANT };
+static const SimpleLoopConstraint SingleExitWeakCfTerminating = { SINGLE_EXIT, SOME_SOME, IMPLIES, MAYBE_INVARIANT };
+static const SimpleLoopConstraint SingleExitProvedCfWellformed = { SINGLE_EXIT, SINGLETON, ASSUME_IMPLIES, MAYBE_INVARIANT };
+static const SimpleLoopConstraint SingleExitStrongCfWellformed = { SINGLE_EXIT, SOME_EACH, ASSUME_IMPLIES, MAYBE_INVARIANT };
+static const SimpleLoopConstraint SingleExitWeakCfWellformed = { SINGLE_EXIT, SOME_SOME, ASSUME_IMPLIES, MAYBE_INVARIANT };
+
+static const SimpleLoopConstraint SyntacticTerm = { ANY_EXIT, SINGLETON, IMPLIES, INVARIANT };
+static const SimpleLoopConstraint AnyExitStrongCfInvariantTerminating = { ANY_EXIT, SOME_EACH, IMPLIES, INVARIANT };
+static const SimpleLoopConstraint AnyExitWeakCfInvariantTerminating = { ANY_EXIT, SOME_SOME, IMPLIES, INVARIANT };
+static const SimpleLoopConstraint AnyExitProvedCfInvariantWellformed = { ANY_EXIT, SINGLETON, ASSUME_IMPLIES, INVARIANT };
+static const SimpleLoopConstraint AnyExitStrongCfInvariantWellformed = { ANY_EXIT, SOME_EACH, ASSUME_IMPLIES, INVARIANT };
+static const SimpleLoopConstraint AnyExitWeakCfInvariantWellformed = { ANY_EXIT, SOME_SOME, ASSUME_IMPLIES, INVARIANT };
+static const SimpleLoopConstraint SingleExitProvedCfInvariantTerminating = { SINGLE_EXIT, SINGLETON, IMPLIES, INVARIANT };
+static const SimpleLoopConstraint SingleExitStrongCfInvariantTerminating = { SINGLE_EXIT, SOME_EACH, IMPLIES, INVARIANT };
+static const SimpleLoopConstraint SingleExitWeakCfInvariantTerminating = { SINGLE_EXIT, SOME_SOME, IMPLIES, INVARIANT };
+static const SimpleLoopConstraint SingleExitProvedCfInvariantWellformed = { SINGLE_EXIT, SINGLETON, ASSUME_IMPLIES, INVARIANT };
+static const SimpleLoopConstraint SingleExitStrongCfInvariantWellformed = { SINGLE_EXIT, SOME_EACH, ASSUME_IMPLIES, INVARIANT };
+static const SimpleLoopConstraint SingleExitWeakCfInvariantWellformed = { SINGLE_EXIT, SOME_SOME, ASSUME_IMPLIES, INVARIANT };
 
 struct IncrementClassifierConstraint {
   const ExitsCountConstraint ECConstr;

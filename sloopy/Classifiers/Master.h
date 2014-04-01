@@ -181,16 +181,16 @@ class MasterProvingClassifier : public LoopClassifier {
 
       } else {
 
-        auto Result = IntegerIterClassifier.classifyProve(Loop, Constr.FormConstr == ASSUME_IMPLIES);
+        auto Result = IntegerIterClassifier.classifyProve(Loop, Constr.FormConstr == ASSUME_IMPLIES, Constr.InvariantConstr == INVARIANT);
         collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
 
-        Result = AArrayIterClassifier.classifyProve(Loop, Constr.FormConstr == ASSUME_IMPLIES);
+        Result = AArrayIterClassifier.classifyProve(Loop, Constr.FormConstr == ASSUME_IMPLIES, Constr.InvariantConstr == INVARIANT);
         collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
 
-        Result = PArrayIterClassifier.classifyProve(Loop, Constr.FormConstr == ASSUME_IMPLIES);
+        Result = PArrayIterClassifier.classifyProve(Loop, Constr.FormConstr == ASSUME_IMPLIES, Constr.InvariantConstr == INVARIANT);
         collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
 
-        Result = DataIterClassifier.classifyProve(Loop, Constr.FormConstr == ASSUME_IMPLIES);
+        Result = DataIterClassifier.classifyProve(Loop, Constr.FormConstr == ASSUME_IMPLIES, Constr.InvariantConstr == INVARIANT);
         collectIncrementSet(Result, ProvablyTerminatingBlocks, AssumptionMap);
 
         switch (Constr.ControlFlowConstr) {

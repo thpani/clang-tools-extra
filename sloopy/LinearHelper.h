@@ -212,11 +212,11 @@ namespace sloopy {
         return MapClangZ3.at(VD);
       }
 
-      /* z3::expr VisitArraySubscriptExpr(const ArraySubscriptExpr *ASE) { */
-      /*   const Expr *Base = ASE->getBase(); */
-      /*   const Expr *Idx = ASE->getIdx(); */
-      /*   return z3::select(Visit(Base), Visit(Idx)); */
-      /* } */
+      z3::expr VisitArraySubscriptExpr(const ArraySubscriptExpr *ASE) {
+        const Expr *Base = ASE->getBase();
+        const Expr *Idx = ASE->getIdx();
+        return Deref(Visit(Base)+Visit(Idx));
+      }
 
       z3::expr VisitUnaryOperator(const UnaryOperator *UO) {
         const Expr *Sub = UO->getSubExpr();
