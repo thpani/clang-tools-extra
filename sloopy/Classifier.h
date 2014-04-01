@@ -90,6 +90,7 @@ class Classifier {
       }
       MasterPC.classify(Unsliced, SyntacticTerm);
       if (not Psyntterm_only) {
+        MasterPC.classify(Unsliced, AnyExitProvedCfTerminating);
         MasterPC.classify(Unsliced, AnyExitStrongCfTerminating);
         MasterPC.classify(Unsliced, AnyExitWeakCfTerminating);
         MasterPC.classify(Unsliced, AnyExitProvedCfWellformed);
@@ -101,6 +102,18 @@ class Classifier {
         MasterPC.classify(Unsliced, SingleExitProvedCfWellformed);
         MasterPC.classify(Unsliced, SingleExitStrongCfWellformed);
         MasterPC.classify(Unsliced, SingleExitWeakCfWellformed);
+
+        MasterPC.classify(Unsliced, AnyExitStrongCfInvariantTerminating);
+        MasterPC.classify(Unsliced, AnyExitWeakCfInvariantTerminating);
+        MasterPC.classify(Unsliced, AnyExitProvedCfInvariantWellformed);
+        MasterPC.classify(Unsliced, AnyExitStrongCfInvariantWellformed);
+        MasterPC.classify(Unsliced, AnyExitWeakCfInvariantWellformed);
+        MasterPC.classify(Unsliced, SingleExitProvedCfInvariantTerminating);
+        MasterPC.classify(Unsliced, SingleExitStrongCfInvariantTerminating);
+        MasterPC.classify(Unsliced, SingleExitWeakCfInvariantTerminating);
+        MasterPC.classify(Unsliced, SingleExitProvedCfInvariantWellformed);
+        MasterPC.classify(Unsliced, SingleExitStrongCfInvariantWellformed);
+        MasterPC.classify(Unsliced, SingleExitWeakCfInvariantWellformed);
 
         // Influence
 

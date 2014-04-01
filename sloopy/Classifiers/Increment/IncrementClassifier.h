@@ -314,7 +314,7 @@ class IncrementClassifier : public LoopClassifier {
     virtual ~IncrementClassifier() {}
 
     std::pair<std::set<const NaturalLoopBlock*>, std::map<const NaturalLoopBlock*, llvm::BitVector>>
-     classifyProve(const NaturalLoop *Loop, const bool assumeImplies = false) const throw () {
+     classifyProve(const NaturalLoop *Loop, const bool assumeImplies, const bool checkInvariant) const throw () {
 #undef DEBUG_TYPE
 #define DEBUG_TYPE "prove"
       LoopVariableFinder Finder(this);
@@ -362,7 +362,6 @@ class IncrementClassifier : public LoopClassifier {
 
       std::set<const NaturalLoopBlock*> ProvablyTerminatingBlocks;
       std::map<const NaturalLoopBlock*, llvm::BitVector> AssumptionMap;
-      llvm::BitVector Assumption(LinearHelper::AssumptionSize);
       // find provably terminating blocks
       for (NaturalLoopBlock::const_pred_iterator PI = Loop->getExit().pred_begin(),
                                                  PE = Loop->getExit().pred_end();
@@ -422,12 +421,14 @@ class IncrementClassifier : public LoopClassifier {
 
           // check if all constants are loop-invariant
           bool AllVarsConst = true;
-          for (auto VD : H.getConstants()) {
-            if (VD == I.VD) continue;
-            AllVarsConst = AllVarsConst and F.isInvariant(VD);
-            if (!AllVarsConst) {
-              DEBUG( llvm::dbgs() << VD->getNameAsString() << " is not const\n" );
-              break;
+          if (checkInvariant) {
+            for (auto VD : H.getConstants()) {
+              if (VD == I.VD) continue;
+              AllVarsConst = AllVarsConst and F.isInvariant(VD);
+              if (!AllVarsConst) {
+                DEBUG( llvm::dbgs() << VD->getNameAsString() << " is not const\n" );
+                break;
+              }
             }
           }
           if (!AllVarsConst) {
@@ -435,8 +436,7 @@ class IncrementClassifier : public LoopClassifier {
           }
 
           auto A = H.getAssumptions();
-          assert(Assumption.size() == A.size() and "bitvectors should be same size");
-          AssumptionMap[Block] = Assumption;
+          AssumptionMap[Block] = A;
           ProvablyTerminatingBlocks.insert(Block);
         }
       }
