@@ -52,7 +52,7 @@ int main(int argc, const char **argv) {
 
   // print statistics
   if (LoopStats) {
-    DEBUG(llvm::dbgs() << "Preparing statistics...\n");
+    DEBUG_WITH_TYPE("progress", llvm::dbgs() << "Preparing statistics...\n");
     if (!::llvm::DebugFlag) {
       llvm::errs() << ".";
     }

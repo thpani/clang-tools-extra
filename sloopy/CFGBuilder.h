@@ -358,7 +358,7 @@ class FunctionCallback : public MatchFinder::MatchCallback {
       if (!D->hasBody()) return;
       if (Function != "" and D->getNameAsString() != Function) return;
 
-      DEBUG(
+      DEBUG_WITH_TYPE("progress",
           llvm::dbgs() << "Processing: " << Result.SourceManager->getPresumedLoc(D->getLocation()).getFilename() << " " << D->getNameAsString() << "\n";
           llvm::dbgs().flush();
       );
