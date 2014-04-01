@@ -352,12 +352,16 @@ class FunctionCallback : public MatchFinder::MatchCallback {
     std::unique_ptr<Classifier> C;
   public:
     FunctionCallback() : Context(NULL) {}
+
     virtual void run(const MatchFinder::MatchResult &Result) {
       const FunctionDecl *D = Result.Nodes.getNodeAs<FunctionDecl>(FunctionName);
       if (!D->hasBody()) return;
       if (Function != "" and D->getNameAsString() != Function) return;
-      DEBUG(llvm::dbgs() << "Processing: " << Result.SourceManager->getPresumedLoc(D->getLocation()).getFilename() << " " << D->getNameAsString() << "\n");
-      llvm::errs().flush();
+
+      DEBUG(
+          llvm::dbgs() << "Processing: " << Result.SourceManager->getPresumedLoc(D->getLocation()).getFilename() << " " << D->getNameAsString() << "\n";
+          llvm::dbgs().flush();
+      );
 
       std::map<const CFGBlock*, std::vector<LoopDescriptor>> Loops;
 
@@ -373,6 +377,9 @@ class FunctionCallback : public MatchFinder::MatchCallback {
 
       DominatorTree Dom;
       Dom.buildDominatorTree(*AC);
+
+      PostDominatorTree PostDom;
+      PostDom.buildDominatorTree(*AC);
 
       for (CFG::const_iterator it = CFG->begin(), end = CFG->end(); it != end; it++) {
         const CFGBlock *Tail = *it;
@@ -400,16 +407,23 @@ class FunctionCallback : public MatchFinder::MatchCallback {
               }
             }
 
-            Loops[Header].push_back({Header, Tail, Body});
+            bool IsTriviallyNonterminating = false;
+            if (not PostDom.dominates(Header, Tail)) {
+              IsTriviallyNonterminating = true;
+            }
+
+            Loops[Header].push_back({Header, Tail, Body, IsTriviallyNonterminating});
           }
         }
       }
+
 
       // Merge loops with the same header.
       std::vector<MergedLoopDescriptor> LoopsAfterMerging;
       for (auto L : Loops) {
         const CFGBlock *Header = L.first;
         auto List = L.second;
+        bool IsTriviallyNonterminating = true;
         
         std::set<const CFGBlock*> MergedBody;
         std::set<const CFGBlock*> MergedTails;
@@ -418,8 +432,9 @@ class FunctionCallback : public MatchFinder::MatchCallback {
             MergedBody.insert(Block);
           }
           MergedTails.insert(L2.Tail);
+          IsTriviallyNonterminating = IsTriviallyNonterminating and L2.IsTriviallyNonterminating;
         }
-        LoopsAfterMerging.push_back(MergedLoopDescriptor(Header, MergedTails, MergedBody));
+        LoopsAfterMerging.push_back(MergedLoopDescriptor(Header, MergedTails, MergedBody, IsTriviallyNonterminating));
       }
 
       // Determine nested
@@ -559,6 +574,9 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         LoopClassifier::classify(Pair.second[0], "FinitePaths");
 next_loop:
         ;
+        if (MLD.IsTriviallyNonterminating) {
+          LoopClassifier::classify(Pair.second[0], "TriviallyNonterminating");
+        }
       }
 
       // InfluencesOuter is only classified when we reach the outer loop,

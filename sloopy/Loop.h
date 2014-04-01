@@ -27,10 +27,12 @@ class MergedLoopDescriptor {
   std::set<const CFGBlock*> Tails;
   std::set<const CFGBlock*> Body;
   std::vector<const MergedLoopDescriptor*> NestedLoops, ProperlyNestedLoops, NestingLoops;
+  const bool IsTriviallyNonterminating;
   MergedLoopDescriptor(
     const CFGBlock *Header,
     std::set<const CFGBlock*> Tails,
-    std::set<const CFGBlock*> Body) : Header(Header), Tails(Tails), Body(Body) {}
+    std::set<const CFGBlock*> Body,
+    const bool IsTriviallyNonterminating) : Header(Header), Tails(Tails), Body(Body), IsTriviallyNonterminating(IsTriviallyNonterminating) {}
   void addNestedLoop(MergedLoopDescriptor *D) {
     NestedLoops.push_back(D);
     D->NestingLoops.push_back(this);
@@ -47,6 +49,7 @@ class MergedLoopDescriptor {
 struct LoopDescriptor {
   const CFGBlock *Header, *Tail;
   std::set<const CFGBlock*> Body;
+  const bool IsTriviallyNonterminating;
 };
 struct SlicingCriterion {
   const std::set<const VarDecl*> Vars;
