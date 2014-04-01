@@ -67,7 +67,7 @@ class AmortizedTypeAClassifier : public LoopClassifier {
       Context(Context),
       Marker(Marker) {}
     void classify(const MasterIncrementClassifier &MasterIncrementClassifier, const IncrementClassifierConstraint Constr, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) const {
-      if (Loop == OutermostNestingLoop) return;
+      if (Loop->getUnsliced() == OutermostNestingLoop->getUnsliced()) return;
 
       auto IncrementSet = MasterIncrementClassifier.classify(Loop, Constr);
       if (!IncrementSet.size()) return;
@@ -118,7 +118,7 @@ class AmortizedTypeA2Classifier : public LoopClassifier {
   mutable unsigned CurrentBlockID;
   public:
     void classify(const MasterIncrementClassifier &MasterIncrementClassifier, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) const {
-      if (Loop == OutermostNestingLoop) return;
+      if (Loop->getUnsliced() == OutermostNestingLoop->getUnsliced()) return;
 
       auto IncrementSet = MasterIncrementClassifier.classify(Loop, MultiExit);
       if (!IncrementSet.size()) return;
@@ -168,7 +168,7 @@ class AmortizedTypeBClassifier : public LoopClassifier {
   mutable unsigned CurrentBlockID;
   public:
     void classify(const MasterIncrementClassifier &MasterIncrementClassifier, const NaturalLoop *Loop, const NaturalLoop *OutermostNestingLoop, const std::vector<const NaturalLoop*> NestingLoops) const {
-      if (Loop == OutermostNestingLoop) return;
+      if (Loop->getUnsliced() == OutermostNestingLoop->getUnsliced()) return;
 
       auto IncrementSet = MasterIncrementClassifier.classify(Loop, MultiExit);
       if (!IncrementSet.size()) return;
