@@ -407,11 +407,8 @@ class FunctionCallback : public MatchFinder::MatchCallback {
               }
             }
 
-            bool IsTriviallyNonterminating = false;
-            if (not PostDom.dominates(Header, Tail)) {
-              IsTriviallyNonterminating = true;
-            }
-
+            llvm::DomTreeNodeBase<CFGBlock> *IDomB = PostDom.getBase().getNode(const_cast<CFGBlock*>(Header));
+            bool IsTriviallyNonterminating = IDomB == nullptr;
             Loops[Header].push_back({Header, Tail, Body, IsTriviallyNonterminating});
           }
         }
@@ -566,6 +563,9 @@ class FunctionCallback : public MatchFinder::MatchCallback {
       for (auto Pair : M) {
         auto MLD = Pair.first;
         auto NestingLoops = MLD.NestingLoops;
+
+        LoopClassifier::classify(Pair.second[0], "TriviallyNonterminating", MLD.IsTriviallyNonterminating);
+
         for (const auto NestingLoop : NestingLoops) {
           if (not LoopClassifier::hasClass(M[*NestingLoop][0], "Proved")) {
             goto next_loop;
@@ -574,9 +574,6 @@ class FunctionCallback : public MatchFinder::MatchCallback {
         LoopClassifier::classify(Pair.second[0], "FinitePaths");
 next_loop:
         ;
-        if (MLD.IsTriviallyNonterminating) {
-          LoopClassifier::classify(Pair.second[0], "TriviallyNonterminating");
-        }
       }
 
       // InfluencesOuter is only classified when we reach the outer loop,
