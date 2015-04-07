@@ -92,7 +92,7 @@ int main(int argc, const char **argv) {
         }
       }
     }
-    std::cout << "benchmark\tbounded\tterminating\tsimple\ttnont\tnonsimple\tany\tsloopytime\tsloopylooptime\tsloopycfgtime\n";
+    std::cout << "benchmark\tbounded\tterminating\tsimple\ttnont\thard\tsloopytime\tsloopylooptime\tsloopycfgtime\n";
 
     std::cout <<
       BenchName << "\t" <<
@@ -100,8 +100,7 @@ int main(int argc, const char **argv) {
       percentage(ClassCounts["Proved"], NumLoops) << "\t" <<
       percentage(ClassCounts["AnyExitWeakCfWellformed"], NumLoops) << "\t" <<
       percentage(ClassCounts["TriviallyNonterminating"], NumLoops) << "\t" <<
-      (100. - percentage(ClassCounts["AnyExitWeakCfWellformed"], NumLoops)) << "\t" <<
-      percentage(ClassCounts["ANY"], NumLoops) << "\t" <<
+      (NumLoops == 0 ? 0 : (100. - percentage(ClassCounts["AnyExitWeakCfWellformed"], NumLoops))) << "\t" <<
       (now()-Begin) << "\t" <<
       ClassCounts["Time"] << "\n";
   }
