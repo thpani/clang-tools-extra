@@ -584,7 +584,7 @@ next_loop:
         auto LocationID = Unsliced->getLoopStmtID(Result.SourceManager);
 
         if (isSpecified(D, LocationID)) {
-          if ((HasClass == std::string() && !LoopStats) ||
+          if ((HasClass == std::string() && !LoopStats && !MachineLearning) ||
               (HasClass != std::string() && LoopClassifier::hasClass(Unsliced, HasClass))) {
             llvm::errs() << LoopLocationMap[Unsliced] << "\n";
             if (DumpClasses || DumpClassesAll) {

@@ -24,6 +24,7 @@
 
 #include "CmdLine.h"
 #include "CFGBuilder.h"
+#include "Time.h"
 
 using namespace clang;
 using namespace clang::driver;
@@ -32,6 +33,10 @@ using namespace llvm;
 
 using namespace sloopy;
 
+double percentage(unsigned Count, unsigned N) {
+  if (N == 0) return 0;
+  return 100. * Count / N;
+}
 
 int main(int argc, const char **argv) {
   llvm::sys::PrintStackTraceOnErrorSignal();
@@ -47,6 +52,7 @@ int main(int argc, const char **argv) {
   Finder.addMatcher(FunctionMatcher, &FC);
 
   // run
+  long Begin = now();
   unsigned ret = Tool.run(newFrontendActionFactory(&Finder));
   /* we continue even if sloopy failed on some file */
 
@@ -60,7 +66,44 @@ int main(int argc, const char **argv) {
     std::string ErrorInfo;
     raw_fd_ostream ostream(Filename.c_str(), ErrorInfo);
     dumpClasses(ostream, OutputFormat::JSON);
+
+
     ostream.close();
+  }
+
+  if (MachineLearning) {
+    size_t NumLoops = Classifications.size();
+    std::map<std::string,unsigned> ClassCounts = {
+      { "FinitePaths", 0 },
+      { "Proved", 0 },
+      { "AnyExitWeakCfWellformed", 0 },
+      { "TriviallyNonterminating", 0 },
+      { "ANY", 0 },
+      { "Time", 0 }
+    };
+    for (ClassificationMap::const_iterator I = Classifications.begin(),
+                                           E = Classifications.end();
+                                           I != E; I++) {
+      auto PropertyMap = I->second;
+      for (std::map<std::string,unsigned>::iterator it=ClassCounts.begin(); it!=ClassCounts.end(); ++it) {
+        std::string CurrentProperty = it->first;
+        if(int CurrentValue = boost::get<int>(PropertyMap[CurrentProperty])) {
+          ClassCounts[CurrentProperty] += CurrentValue;
+        }
+      }
+    }
+    std::cout << "benchmark\tbounded\tterminating\tsimple\ttnont\tnonsimple\tany\tsloopytime\tsloopylooptime\tsloopycfgtime\n";
+
+    std::cout <<
+      BenchName << "\t" <<
+      percentage(ClassCounts["FinitePaths"], NumLoops) << "\t" <<
+      percentage(ClassCounts["Proved"], NumLoops) << "\t" <<
+      percentage(ClassCounts["AnyExitWeakCfWellformed"], NumLoops) << "\t" <<
+      percentage(ClassCounts["TriviallyNonterminating"], NumLoops) << "\t" <<
+      (100. - percentage(ClassCounts["AnyExitWeakCfWellformed"], NumLoops)) << "\t" <<
+      percentage(ClassCounts["ANY"], NumLoops) << "\t" <<
+      (now()-Begin) << "\t" <<
+      ClassCounts["Time"] << "\n";
   }
 
   return ret;

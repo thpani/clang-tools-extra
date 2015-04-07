@@ -6,15 +6,7 @@
 /* #include "Classifiers/EmptyBody.h" */
 /* #include "Classifiers/Cond.h" */
 
-#include <time.h>
-#include <sys/time.h>
-
-long now() {
-  timeval time;
-  gettimeofday(&time, NULL);
-  long millis = (time.tv_sec * 1000) + (time.tv_usec / 1000);
-  return millis;
-}
+#include "Time.h"
 
 class Classifier {
   const AnyLoopCounter ALC;
@@ -48,6 +40,11 @@ class Classifier {
         const std::vector<const NaturalLoop*> ProperlyNestedLoops) const {
       long Begin = now();
 
+      if (MachineLearning) {
+        ALC.classify(Unsliced); // ANY + Stmt
+        MasterPC.classify(Unsliced, SyntacticTerm);
+        MasterPC.classify(Unsliced, AnyExitWeakCfWellformed);
+      } else {
       // ANY + Stmt
       ALC.classify(Unsliced);
 
@@ -131,6 +128,7 @@ class Classifier {
           */
           IIOC.classify(ProperlyNestedLoops, Unsliced);
         }
+      }
       }
 
       LoopClassifier::classify(Unsliced, "Time", (int)(now()-Begin));
