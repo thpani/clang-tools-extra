@@ -99,17 +99,24 @@ int main(int argc, const char **argv) {
         }
       }
     }
-    std::cout << "benchmark\tbounded\tterminating\tsimple\ttnont\thard\tsloopytime\tsloopylooptime\tsloopycfgtime\n";
+    // std::cout << "benchmark\tbounded\tterminating\tsimple\ttnont\thard\tfpcalls\tfpargs\tcfgblocks\tmaxindeg\tsloopytime\tsloopylooptime\tsloopycfgtime\tsloopyparsing\n";
 
+    long End = now();
     std::cout <<
-      BenchName << "\t" <<
-      percentage(ClassCounts["FinitePaths"], NumLoops) << "\t" <<
-      percentage(ClassCounts["Proved"], NumLoops) << "\t" <<
-      percentage(ClassCounts["AnyExitWeakCfWellformed"], NumLoops) << "\t" <<
-      percentage(ClassCounts["TriviallyNonterminating"], NumLoops) << "\t" <<
+      BenchName                                                                                   << "\t" <<
+      percentage(ClassCounts["FinitePaths"], NumLoops)                                            << "\t" <<
+      percentage(ClassCounts["Proved"], NumLoops)                                                 << "\t" <<
+      percentage(ClassCounts["AnyExitWeakCfWellformed"], NumLoops)                                << "\t" <<
+      percentage(ClassCounts["TriviallyNonterminating"], NumLoops)                                << "\t" <<
       (NumLoops == 0 ? 0 : (100. - percentage(ClassCounts["AnyExitWeakCfWellformed"], NumLoops))) << "\t" <<
-      (now()-Begin) << "\t" <<
-      ClassCounts["Time"] << "\n";
+      percentage(FPC.fp_calls, FPC.calls)                                                         << "\t" <<
+      percentage(FPC.fp_args, FPC.args)                                                           << "\t" <<
+      CFGFC.size                                                                                  << "\t" <<
+      CFGFC.max_fan_in                                                                            << "\t" <<
+      (End-Begin)                                                                                 << "\t" <<
+      FC.time                                                                                     << "\t" <<
+      (FPC.time + CFGFC.time)                                                                     << "\t" <<
+      (End-Begin-FC.time-FPC.time-CFGFC.time)                                                     << "\n";
   }
 
   return ret;
