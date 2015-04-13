@@ -347,6 +347,65 @@ bool isOutermostNestingLoop(const MergedLoopDescriptor *D) {
   return D->NestingLoops.size() == 1;
 }
 
+class FPCallback : public MatchFinder::MatchCallback {
+  public:
+    uint64_t calls, fp_calls, args, fp_args, time;
+    FPCallback() : calls(0), fp_calls(0), args(0), fp_args(0), time(0) {}
+    virtual void run(const MatchFinder::MatchResult &Result) {
+      long Begin = now();
+      CallExpr *CE = const_cast<CallExpr*>(Result.Nodes.getNodeAs<CallExpr>(FunctionName));
+
+      calls++;
+
+      for (CallExpr::arg_iterator it = CE->arg_begin(); it != CE->arg_end(); ++it) {
+        auto Arg         = *it;
+        if (Arg->getType().getTypePtr()->isFunctionPointerType()) {
+          fp_calls++;
+          break;
+        }
+      }
+      for (CallExpr::arg_iterator it = CE->arg_begin(); it != CE->arg_end(); ++it) {
+        args++;
+        auto Arg         = *it;
+        if (Arg->getType().getTypePtr()->isFunctionPointerType()) {
+          fp_args++;
+        }
+      }
+      time += (now()-Begin);
+  }
+};
+
+class CFGCallback : public MatchFinder::MatchCallback {
+  public:
+    uint64_t size, max_fan_in, time;
+    CFGCallback() : size(0), max_fan_in(0), time(0) {}
+    /* std::vector<uint32_t> fan_ins; */
+    /* std::vector<uint32_t> fan_outs; */
+    virtual void run(const MatchFinder::MatchResult &Result) {
+      long Begin = now();
+      const FunctionDecl *D = Result.Nodes.getNodeAs<FunctionDecl>(FunctionName);
+      if (!D->hasBody()) return;
+
+      AnalysisDeclContextManager mgr;
+      AnalysisDeclContext *AC = mgr.getContext(D);
+      CFG *CFG                = AC->getCFG();
+
+      /* fan_ins = std::vector<uint32_t>(CFG->size()); */
+
+      size = CFG->size();
+      for (auto it = CFG->begin(); it != CFG->end(); it++) {
+        auto Block = *it;
+        if (Block->pred_size() > max_fan_in) {
+          max_fan_in = Block->pred_size();
+        }
+      }
+      /*   fan_ins.push_back(Block->pred_size()); */
+      /*   /1* fan_outs.push_back(Block->succ_size()); *1/ */
+      /* } */
+      time += (now()-Begin);
+  }
+};
+
 class FunctionCallback : public MatchFinder::MatchCallback {
   private:
     const ASTContext *Context;

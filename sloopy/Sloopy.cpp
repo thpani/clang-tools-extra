@@ -48,8 +48,15 @@ int main(int argc, const char **argv) {
   ClangTool Tool(OptionsParser.getCompilations(),
                  OptionsParser.getSourcePathList());
   MatchFinder Finder;
+
   FunctionCallback FC;
+  CFGCallback CFGFC;
   Finder.addMatcher(FunctionMatcher, &FC);
+  Finder.addMatcher(FunctionMatcher, &CFGFC);
+
+  auto CallMatcher = callExpr().bind(FunctionName);
+  FPCallback FPC;
+  Finder.addMatcher(CallMatcher, &FPC);
 
   // run
   long Begin = now();
