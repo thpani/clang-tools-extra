@@ -15,6 +15,7 @@
 #include "LoopMatchers.h"
 #include "DefUse.h"
 #include "Classifier.h"
+#include "Time.h"
 
 using namespace clang;
 using namespace clang::ast_matchers;
@@ -351,9 +352,11 @@ class FunctionCallback : public MatchFinder::MatchCallback {
     const ASTContext *Context;
     std::unique_ptr<Classifier> C;
   public:
-    FunctionCallback() : Context(NULL) {}
+    FunctionCallback() : Context(NULL), time(0) {}
+    unsigned time;
 
     virtual void run(const MatchFinder::MatchResult &Result) {
+      long Begin = now();
       const FunctionDecl *D = Result.Nodes.getNodeAs<FunctionDecl>(FunctionName);
       if (!D->hasBody()) return;
       if (Function != "" and D->getNameAsString() != Function) return;
@@ -605,5 +608,6 @@ next_loop:
         delete SlicedAllLoops;
         delete SlicedOuterLoop;
       }
+      time += (now()-Begin);
     }
 };
