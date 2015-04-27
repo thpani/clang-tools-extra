@@ -27,11 +27,20 @@ set(CLANG_TOOLS_TEST_DEPS
   clang clang-headers FileCheck count not
 
   # Individual tools we test.
-  remove-cstr-calls clang-apply-replacements clang-modernize modularize clang-tidy
+  clang-apply-replacements
+  clang-modernize
+  clang-tidy
+  modularize
+  pp-trace
+  remove-cstr-calls
 
   # Unit tests
   ExtraToolsUnitTests
   )
+
+if(HAVE_LIBEDIT)
+  list(APPEND CLANG_TOOLS_TEST_DEPS clang-query)
+endif()
 
 add_lit_testsuite(check-clang-tools "Running the Clang extra tools' regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}
