@@ -66,9 +66,11 @@ int main(int argc, const char **argv) {
   // print statistics
   if (LoopStats) {
     DEBUG_WITH_TYPE("progress", llvm::dbgs() << "Preparing statistics...\n");
+#ifndef NDEBUG
     if (!::llvm::DebugFlag) {
       llvm::errs() << ".";
     }
+#endif
     std::string Filename(BenchName+".json");
     std::string ErrorInfo;
     raw_fd_ostream ostream(Filename.c_str(), ErrorInfo);
