@@ -3,6 +3,7 @@
 llvm::cl::opt<std::string> BenchName("bench-name");
 llvm::cl::opt<bool> LoopStats("loop-stats");
 llvm::cl::opt<bool> MachineLearning("ml");
+llvm::cl::opt<bool> MachineLearningFormat("ml-format");
 llvm::cl::opt<bool> AllowInfiniteLoops("allow-infinite-loops", llvm::cl::init(true));
 llvm::cl::opt<bool> ViewCFG("view-cfg");
 llvm::cl::opt<bool> DumpCDG("dump-cdg");

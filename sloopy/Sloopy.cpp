@@ -44,6 +44,12 @@ int main(int argc, const char **argv) {
   // parse options
   CommonOptionsParser OptionsParser(argc, argv);
 
+
+  if (MachineLearningFormat) {
+    std::cout << "benchmark\tbounded\tterminating\tsimple\ttnont\thard\tfpcalls\tfpargs\tcfgblocks\tmaxindeg\tsloopytime\tsloopylooptime\tsloopycfgtime\tsloopyparsing\n";
+    return 0;
+  }
+
   // setup clang tool
   ClangTool Tool(OptionsParser.getCompilations(),
                  OptionsParser.getSourcePathList());
@@ -101,7 +107,6 @@ int main(int argc, const char **argv) {
         }
       }
     }
-    // std::cout << "benchmark\tbounded\tterminating\tsimple\ttnont\thard\tfpcalls\tfpargs\tcfgblocks\tmaxindeg\tsloopytime\tsloopylooptime\tsloopycfgtime\tsloopyparsing\n";
 
     long End = now();
     std::cout <<
