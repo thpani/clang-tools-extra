@@ -4,6 +4,7 @@ FROM ubuntu:trusty
 RUN mkdir -p /home/sloopy/llvm
 RUN apt-get update && apt-get install -y curl git
 RUN curl http://releases.llvm.org/3.4.2/llvm-3.4.2.src.tar.gz | tar xz -C /home/sloopy/llvm --strip-components 1
+RUN curl https://raw.githubusercontent.com/thpani/llvm/3097779e869ec81361413f04104b97c20d0d0182/include/llvm/Analysis/DominatorInternals.h >/home/sloopy/llvm/include/llvm/Analysis/DominatorInternals.h
 RUN mkdir -p /home/sloopy/llvm/tools/clang
 RUN curl http://releases.llvm.org/3.4.2/cfe-3.4.2.src.tar.gz | tar xz -C /home/sloopy/llvm/tools/clang/ --strip-components 1
 RUN mkdir -p /home/sloopy/llvm/tools/clang/tools
