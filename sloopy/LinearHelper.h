@@ -99,7 +99,7 @@ namespace sloopy {
 
   namespace z3helper {
 
-    typedef __int64 machine_int;
+    typedef int64_t machine_int;
 
     bool anyUnknown(const IncrementSet &Increments) {
       for (auto I : Increments) {
@@ -346,7 +346,7 @@ namespace sloopy {
       }
 
       z3::expr VisitIntegerLiteral(const IntegerLiteral *L) {
-        return Ctx->int_val((__int64)L->getValue().getSExtValue());
+        return Ctx->int_val((int64_t)L->getValue().getSExtValue());
       }
 
       z3::expr VisitCharacterLiteral(const CharacterLiteral *L) {
